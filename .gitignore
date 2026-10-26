@@ -1,0 +1,28 @@
+# 敏感与临时文件忽略清单
+# 绝不提交：密码、API Key、验证码、手机号、邮箱、服务器 IP、SSH 密钥、真实券商账号口令
+.env
+.env.*
+*.env
+*secret*
+*credential*
+*.pem
+*.key
+id_rsa*
+id_ed25519
+known_hosts
+config.yaml.bak-*
+*.bak-*
+
+# 虚拟环境与依赖
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# 运行日志与本地状态（可再生，不进仓库）
+*.log
+*.jsonl
+heartbeat_*.json
+shadow_state.json
+*.lock
+.DS_Store
