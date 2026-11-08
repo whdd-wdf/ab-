@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 2026-11-08 — 交易应用统一开关定时启停（用户令，省词元）
+
+- 12 个交易应用由 monitor-gate-open（交易日 07:30）与 monitor-gate-close（交易日 17:05）统一启停：交易日=周一至五且非节日（新浪交易日历判定，脚本 is_trading_day.py，盘前可用）；非交易日全天停用。起因：周日非交易日 2 小时烧 2% 词元，主因是两个 5 分钟监盘与 30 分钟补漏全天候空跑（任务体窗口门只能让 worker 空跑退出，仍耗词元）。
+- 管理范围 12 个：interval（a-intraday-touch-monitor、b-intraday-monitor、a-fill-check）＋9 个交易日周任务（trading-day-supervisor、t0-shadow-supervisor、paper-sell-morning、call-auction-0940-check、a-grid-afternoon、daily-stock-pick、a-grid-close-check、t0-minute-archive、independent-system-review）。已停用的三个任务与月任务、系统任务、cloudflare-daily-quota-check 不归本门管。日历取数失败时按工作日兜底启用并上报不确定性；启停失败重核一次，仍失败向主聊天明报。任务体窗口门保留作第二道防线。已写入总纲 0.6 任务总表与 1.5 监测核查方法；三个 interval 任务已于 2026-11-08 停用，首开为 11-09 07:30。
+
 ## 2026-11-07 — 独立评审机制常态化（用户定为永久制度）
 
 - 独立评审定为交易系统的常设永久制度：每交易日 16:53 常设运行，不得因“最近没问题”停掉或降频；评审闭环为评价之后重执行落地——属实缺口当晚补进总纲/任务体/skill 并复核。已写入总纲 0.8 与 0.6 任务总表，cron independent-system-review 本就启用中（下次 11-09 16:53）。
