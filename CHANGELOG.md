@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 2026-11-09 — B 线多 Agent 辩论决策（影子）+ 统一开关扩至 14 个 + 收盘小结 Pi 试点
+
+- B 线多 Agent 辩论决策上线（用户 2026-11-08 交设计令实施）：交易日 10:00 与 14:00 各一轮，保守与激进两个 agent 讨论、评判 agent 决定，5 选 1（不动、止损、止盈、高位减仓、低位加仓）；只针对现有持仓，不选新股。走 hub 免费 LongCat-2.5（三方同模型换角色），不耗 Muse 词元。硬规则是闸门（debate_gate.py 9 条），辩论决策必须过闸门；硬规则触发由现有监盘执行、不受辩论影响。影子模式先行 10 个交易日（2026-11-09 起至约 11-20），只决策不下单，决策记 logs/debate_YYYYMMDD_HHMM.jsonl；影子期满评估后用户点头才转 execute。已写入总纲 2.6 与 docs/06，定时任务 b-debate-1000（10:00）、b-debate-1400（14:00）。脚本 hidden_files/b_debate/（DESIGN.md、debate_packet.py、debate_prompts.py、debate_gate.py、debate_run.py、debate_state.json）。
+- 统一开关扩至 14 个：新增的两个辩论任务纳入 monitor-gate-open（07:30）与 monitor-gate-close（17:05）统一启停；管理范围现为 interval 3 个＋交易日周任务 11 个。已写入总纲 0.6/1.5 与 docs/06。
+- 收盘小结 Pi 试点（用户 2026-11-09 批准）：a-grid-close-check（15:05）有 13:05 后新增 A 线成交需通报时，Pi（llmhub/LongCat-2.5 免费模型）按结构化数据起草通报正文，Muse 逐项复核数字后发出；无成交仍静默、运行记录仍由 Muse 写；Pi 失败时 Muse 自己写通报。首跑 2026-11-09 15:05，样例起草已验（数字全对）。已写入总纲 0.6/1.5 与 docs/06、a-grid-close-check 任务体。
+- Pi 简单推理分流（用户 2026-11-09 令“把 llmhub 接入，让 Muse 的简单推理用 Pi”）：Pi（pi.dev v1.5.0）配 hub 为自定义 provider（llmhub，模型 longcat-2.5 免费），Key 每次请求时 SSH 取、绝不落盘；沙箱访 hub 走 Tailscale 隧道代理（3130）；包装脚本 ~/workspace/pi/pi-reason.sh。只把简单独立可验证的推理交 Pi，交易决策、规则判断、下单、隐私与凭证操作仍留 Muse；Pi 答案作草稿，关键数字 Muse 独立复核。FreeToken-Bots skill 已存 ~/workspace/custom-skills/local-freetoken-bots/，radar.py 每日 08:00 cron pi-freetoken-radar 扫 OpenRouter 免费名单（首扫 2026-11-09：免费 16 个，可验证 ≥100B+tools 的 0 个）。
+
 ## 2026-11-08 — 交易应用统一开关定时启停（用户令，省词元）
 
 - 12 个交易应用由 monitor-gate-open（交易日 07:30）与 monitor-gate-close（交易日 17:05）统一启停：交易日=周一至五且非节日（新浪交易日历判定，脚本 is_trading_day.py，盘前可用）；非交易日全天停用。起因：周日非交易日 2 小时烧 2% 词元，主因是两个 5 分钟监盘与 30 分钟补漏全天候空跑（任务体窗口门只能让 worker 空跑退出，仍耗词元）。
