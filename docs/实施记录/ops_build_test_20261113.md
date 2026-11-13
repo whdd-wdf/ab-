@@ -82,7 +82,7 @@
 ## 产物
 
 - 本报告：`docs/实施记录/ops_build_test_20261113.md`
-- 搭建产物（74 个文件，已逐文件 base64 传输、md5 全数一致，已排除 `__pycache__`/`*.pyc`）：`docs/实施记录/ops_build_test_20261113_files/`（四脚本 + README + BUILDER_NOTES_20261113.md + FIX_ROUNDS_20261113.md + tests + logs 含 fix1/fix2 两轮原文 + r1/r2/seg）
+- 搭建产物（74 个文件，已逐文件 base64 传输、md5 全数一致，已排除 `__pycache__`/`*.pyc`）：`docs/实施记录/ops_build_test_20261113_files/`（四脚本 + README + BUILDER_NOTES_20261113.md + FIX_ROUNDS_20261113.md + tests + r1/r2/seg；其中 logs/ 17 个文件（.log/.jsonl）按仓库 .gitignore 只留沙箱、不进 GitHub——仓库内 0 个已追踪 .log/.jsonl，关键结论已记入本报告与 FIX_ROUNDS）
 
 ## 还缺什么（下一步）
 
