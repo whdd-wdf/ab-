@@ -9,10 +9,14 @@ AI 只做判断、不自己算；定稿后须复述三元组（代码/名称/现
 干跑（沙箱验证，不调 Ollama）：python3 run_virtual_control.py --dry-run
   （VC_BASE/VC_WORKDIR 环境变量可改虚拟目录与产物目录，默认盒内路径）
 干跑模式：--dry-run（全链路）、--dry-run-bad-triple（三元组错即停）、
-  --dry-run-loose-format（松散定稿：复述在前、定稿行夹杂名称/现价、无理由）。
+  --dry-run-loose-format（松散定稿：复述在前、定稿行夹杂名称/现价、无理由）、
+  --dry-run-multi-pick（多定稿：AI 写多只定稿，验证多定稿行被检测并记录、流程仍取第 1 个走通）。
 定稿解析已放宽：分别抓代码/买入价/数量，允许行内夹杂文字与顺序颠倒；
 价量抓不到时程序从 check 表推导（买入价=现价、股数=qty_50k），日志注明；
 挑股理由缺失只记警告、不阻塞；三元组比对仍保留、不一致即停。
+多定稿检测：定稿行≥2 个记 multi_pick_error（只取第 1 个继续，不停流程）；
+成交确认：程序先按订单号在 trade_log 里找成交行，找到才进 AI 判断（AI 须逐字抄出），
+ai_confirmed 按程序匹配定，不再只凭 AI 自述；找不到直接判未确认、不进 AI 判断。
 产物：virtual_control_log.md（全程记录）、vc_step_*.txt（AI 原文）、
       vc_summary.json（解析出的关键值与时间戳，供沙箱核实）。
 """
@@ -31,7 +35,9 @@ CST = timezone(timedelta(hours=8))
 DRY_RUN = False
 DRY_RUN_BAD_TRIPLE = False
 DRY_RUN_LOOSE_FORMAT = False
+DRY_RUN_MULTI_PICK = False
 DRY_PICK = None  # 干跑定稿候选：{"code","name","price","qty"}，取自 check 表
+DRY_CANDS = []  # 干跑多定稿候选：check 表里的候选（代码/名称/现价/股数）
 
 # 正例/反例（97 字）：涨幅闸门只看“涨幅≤5%”，负涨幅也通过，跌得多≠该买。
 EXAMPLE = ("正例：某股涨 1.41%，涨幅 1.41%≤5%，闸门通过；反例：某股跌 -48.77%，"
@@ -74,6 +80,11 @@ def parse_pick_loose(out_a, checks):
         "已抓" if qty is not None else "缺失")
     return code, price, qty, src
 
+def count_pick_lines(out_a):
+    """数定稿行（含量 6 位代码的“定稿”行）个数；≥2 即多定稿错误。"""
+    return sum(1 for ln in out_a.splitlines()
+               if "定稿" in ln and re.search(r"\d{6}", ln))
+
 def log(msg):
     line = "[%s CST] %s" % (ts(), msg)
     print(line, flush=True)
@@ -104,6 +115,15 @@ def dry_fake(label):
     if label == "步骤A选股":
         p = DRY_PICK or {"code": "600919", "name": "江苏银行", "price": 12.98, "qty": 3800}
         restated_price = p["price"] + 1.00 if DRY_RUN_BAD_TRIPLE else p["price"]
+        if DRY_RUN_MULTI_PICK:
+            # 模拟上轮 AI 的多定稿：把候选逐只写成定稿（第 1 只为 DRY_PICK，其余为其他候选）
+            others = [c for c in (DRY_CANDS or []) if c["code"] != p["code"]][:2]
+            picks = [p] + others
+            lines = ["按程序算好的表判断，逐只写定稿："]
+            for c in picks:
+                lines.append("定稿：代码%s，买入价%.2f，数量%d股" % (c["code"], c["price"], c["qty"]))
+            lines.append("复述：代码%s，名称%s，现价%.2f" % (p["code"], p["name"], restated_price))
+            return "\n".join(lines)
         if DRY_RUN_LOOSE_FORMAT:
             # 模拟上轮 AI 的松散定稿：复述在前、定稿行夹杂名称与现价、无挑股理由
             return ("复述：代码%s，名称%s，现价%.2f\n"
@@ -125,7 +145,11 @@ def dry_fake(label):
     if label == "步骤C评判":
         return "综合双方：四项闸门全通过，保守方风险提示不足以否决，决定买入。\n裁决：买，置信度0.80"
     if label == "步骤D成交确认":
-        return "快照 fills_today 与 trade_log 均有这笔买入成交，延时符合预期。\n成交确认：已确认"
+        p = DRY_PICK or {"code": "600919", "name": "江苏银行", "price": 12.98, "qty": 3800}
+        oid = "B-20261113-%s-1" % p["code"]
+        return ("抄出成交行：订单%s，代码%s，买入价%.2f，数量%d股。\n"
+                "快照 fills_today 与 trade_log 均有这笔买入成交，延时符合预期。\n成交确认：已确认"
+                % (oid, p["code"], p["price"], p["qty"]))
     return "干跑假回复（未匹配步骤）：%s" % label
 
 def call_ollama(prompt, num_predict, label):
@@ -190,8 +214,22 @@ def run_check(code, buy_price=None):
         return None
     return chk
 
+def find_trade_log_row(order_id):
+    """按订单号在虚拟 trade_log 里找成交行（备注含“订单<order_id>”），返回原文行或 None。"""
+    path = os.path.join(BASE, "virtual_trade_log.csv")
+    try:
+        with open(path, encoding="utf-8") as f:
+            lines = f.read().splitlines()
+    except Exception as e:
+        log("读虚拟 trade_log 失败：%r" % e)
+        return None
+    for ln in lines:
+        if order_id in ln:
+            return ln
+    return None
+
 def main(argv=None):
-    global DRY_RUN, DRY_RUN_BAD_TRIPLE, DRY_RUN_LOOSE_FORMAT, DRY_PICK
+    global DRY_RUN, DRY_RUN_BAD_TRIPLE, DRY_RUN_LOOSE_FORMAT, DRY_RUN_MULTI_PICK, DRY_PICK, DRY_CANDS
     ap = argparse.ArgumentParser(description="盒内 AI 对接虚拟程序：一轮管控（选股→把关→辩论→提交→成交确认）")
     ap.add_argument("--dry-run", action="store_true",
                     help="干跑：不调 Ollama，按步骤返回固定假回复，走通完整链路")
@@ -199,10 +237,14 @@ def main(argv=None):
                     help="干跑：步骤 A 的复述现价故意写错，验证三元组不符即停、不进把关")
     ap.add_argument("--dry-run-loose-format", action="store_true",
                     help="干跑：步骤 A 定稿行夹杂名称/现价且复述在前、无挑股理由，验证放宽解析能抓到三字段并走通")
+    ap.add_argument("--dry-run-multi-pick", action="store_true",
+                    help="干跑：步骤 A 写多只定稿，验证多定稿行被检测并记录、流程仍取第 1 个走通")
     args = ap.parse_args(argv)
-    DRY_RUN = bool(args.dry_run or args.dry_run_bad_triple or args.dry_run_loose_format)
+    DRY_RUN = bool(args.dry_run or args.dry_run_bad_triple or args.dry_run_loose_format
+                   or args.dry_run_multi_pick)
     DRY_RUN_BAD_TRIPLE = bool(args.dry_run_bad_triple)
     DRY_RUN_LOOSE_FORMAT = bool(args.dry_run_loose_format)
+    DRY_RUN_MULTI_PICK = bool(args.dry_run_multi_pick)
 
     os.makedirs(WORKDIR, exist_ok=True)
     with open(LOG, "w", encoding="utf-8") as f:
@@ -263,6 +305,10 @@ def main(argv=None):
         if code0:
             DRY_PICK = {"code": code0, "name": checks[code0]["name"],
                         "price": checks[code0]["price"], "qty": checks[code0]["qty_50k"]}
+    # 干跑多定稿候选用：check 表里的候选（代码/名称/现价/股数）
+    DRY_CANDS = [{"code": c, "name": checks[c]["name"],
+                  "price": checks[c]["price"], "qty": checks[c]["qty_50k"]}
+                 for c in cand_codes if c in checks]
 
     # ---- 步骤 A：选股（只读程序算好的表，不自己算） ----
     prompt_a = (
@@ -273,7 +319,7 @@ def main(argv=None):
         "单笔金额须≥5000 元且≤50000 元；买入后 B 线持仓≤3 只。\n"
         "%s\n"
         "任务：从表中挑 1 只（优先四 gates 全通过的），写出挑股理由（只能用上表数字），"
-        "买入价取现价、数量取表中股数。"
+        "买入价取现价、数量取表中股数。只写 1 只定稿，多写即错（只取第 1 个定稿行，其余视为错误）。"
         "控制在 600 字以内。倒数第二行按此格式写：定稿：代码XXXXXX，买入价X.XX，数量Y股。"
         "最后一行按此格式写：复述：代码XXXXXX，名称XXX，现价X.XX（名称与现价抄上表）。"
         % (b_avail, cand_table, EXAMPLE))
@@ -286,6 +332,12 @@ def main(argv=None):
     # ---- 放宽定稿解析：分别抓代码/买入价/数量，允许行内夹杂文字与顺序颠倒 ----
     code, price, qty, parse_src = parse_pick_loose(out_a, checks)
     summary["steps"]["A_pick"]["parse"] = parse_src
+    # ---- 多定稿行检测（残留错误 1）：定稿行≥2 个记错误，只取第 1 个继续 ----
+    n_pick = count_pick_lines(out_a)
+    summary["steps"]["A_pick"]["pick_lines"] = n_pick
+    if n_pick >= 2:
+        log("错误：多定稿行（共 %d 个定稿行，只取第 1 个继续，多写即错）" % n_pick)
+        summary["steps"]["A_pick"]["multi_pick_error"] = {"count": n_pick, "taken": code}
     if code is None:
         log("步骤A未抓到定稿代码（%s），停止，不替 AI 猜股票" % parse_src)
         json.dump(summary, open(SUMMARY, "w"), ensure_ascii=False, indent=2); return
@@ -475,23 +527,51 @@ def main(argv=None):
     summary["submit"]["snapshot_file"] = snap_files[-1]
     summary["submit"]["snapshot"] = snap
 
-    # ---- 步骤 D2：AI 读快照检出成交、报延时 ----
+    # ---- 程序先按订单号在 trade_log 里找成交行（残留错误 2）：找不到直接判未确认，不进 AI 判断 ----
+    oid = order["order_id"]
+    fill_row = find_trade_log_row(oid)
+    program_found = fill_row is not None
+    summary["submit"]["program_found_fill_row"] = program_found
+    if not program_found:
+        log("程序按订单号 %s 在虚拟 trade_log 里未找到成交行，直接判未确认，不进 AI 判断" % oid)
+        summary["submit"]["ai_confirmed"] = False
+        summary["steps"]["D_confirm"] = {"ok": False, "reason": "程序未找到成交行"}
+        log("脚本结束")
+        json.dump(summary, open(SUMMARY, "w"), ensure_ascii=False, indent=2)
+        return
+    log("程序按订单号 %s 在虚拟 trade_log 里找到成交行：%s" % (oid, fill_row))
+    # ---- 步骤 D2：AI 逐字抄出成交行、报延时 ----
     fills = snap.get("fills_today", [])
     fill_txt = json.dumps(fills, ensure_ascii=False) if fills else "（无成交）"
     log_tail = r.stdout.strip()[-1200:]
     prompt_d = (
         "你是成交确认员。B 线买单已提交虚拟执行器，提交时间 %s，快照时间 %s。\n"
+        "程序已按订单号 %s 在虚拟 trade_log 里找到该成交行，原文如下——你只需逐字抄出并确认：\n%s\n"
         "最新快照 fills_today：%s\n虚拟 trade_log 尾部：\n%s\n"
-        "任务：1）指出快照里这笔买单是否成交（写出代码、价格、数量）；"
-        "2）算延时=快照时间−提交时间，写出算式和结果（单位：秒）；3）确认 trade_log 里有没有这笔成交行。"
+        "任务：1）逐字抄出上面程序找到的成交行原文；2）指出快照里这笔买单是否成交（写出代码、价格、数量）；"
+        "3）算延时=快照时间−提交时间，写出算式和结果（单位：秒）。"
         "最后一行写：成交确认：已确认 或 成交确认：未确认。控制在 400 字以内。"
-        % (t_submit.strftime("%H:%M:%S"), t_snap.strftime("%H:%M:%S"), fill_txt, log_tail))
+        % (t_submit.strftime("%H:%M:%S"), t_snap.strftime("%H:%M:%S"), oid, fill_row, fill_txt, log_tail))
     out_d, dt_d, att_d = call_ollama(prompt_d, 500, "步骤D成交确认")
     summary["steps"]["D_confirm"] = {"seconds": dt_d, "attempts": att_d, "ok": out_d is not None}
     if out_d is not None:
         save_step("D_confirm", prompt_d, out_d)
-        log("步骤D解析：%s" % ("已确认" if "成交确认：已确认" in out_d else "未确认/未明"))
-        summary["submit"]["ai_confirmed"] = "成交确认：已确认" in out_d
+        ai_says = "成交确认：已确认" in out_d
+        # 程序比对 AI 是否抄出成交行：订单号 + 代码 + 价格 + 数量须出现在 AI 输出里
+        norm_out = re.sub(r"\s+", "", out_d)
+        copy_ok = (oid in norm_out and str(code) in norm_out
+                   and str(price) in norm_out and str(qty) in norm_out)
+        # ai_confirmed 按程序匹配定，不再只凭 AI 自述；抄不出记错误
+        summary["submit"]["ai_confirmed"] = program_found
+        summary["submit"]["ai_says_confirmed"] = ai_says
+        summary["submit"]["ai_copy_row_ok"] = copy_ok
+        if not copy_ok:
+            log("错误：AI 未逐字抄出成交行原文（订单号/代码/价格/数量未全出现在输出里）")
+        if ai_says != program_found:
+            log("注意：AI 自述（%s）与程序匹配（%s）不一致，以程序为准"
+                % ("已确认" if ai_says else "未确认", "已确认" if program_found else "未确认"))
+        log("步骤D解析：程序已找到成交行，ai_confirmed=%s（程序为准），AI 自述=%s，抄出行=%s"
+            % (program_found, "已确认" if ai_says else "未确认", "是" if copy_ok else "否"))
     log("脚本结束")
     json.dump(summary, open(SUMMARY, "w"), ensure_ascii=False, indent=2)
 
