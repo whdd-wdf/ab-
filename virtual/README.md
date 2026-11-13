@@ -14,7 +14,7 @@
 | 文件 | 作用 |
 |---|---|
 | `virtual_ops.py` | 唯一入口（Python 标准库，无第三方依赖）。订单队列、合规校验、虚拟执行器、虚拟行情、虚拟 quota、门控标志、fillwatch 快照、节点账本 JSON |
-| `selftest.py` | 自测脚本：跑一轮 4 项检查，全部 PASS 才算通过 |
+| `selftest.py` | 自测脚本：跑一轮 6 项检查，全部 PASS 才算通过 |
 | `README.md` | 本文件 |
 | `order_queue/{pending,done,failed}/` | 订单队列（`init` 后生成，§1） |
 | `virtual_trade_log.csv` | 虚拟成交总账（`init` 后生成，§2 格式，9 列） |
@@ -31,6 +31,8 @@
 cd ~/workspace/ab-/virtual
 python3 virtual_ops.py init # 初始化 / 重置虚拟状态
 python3 virtual_ops.py quote 601088 # 查虚拟行情
+python3 virtual_ops.py check 600919 # 算数：涨幅/P4/5万量/偏差一次算好（AI 只读数字、不自己算）
+python3 virtual_ops.py check 600919 12.87 # 指定买价算一遍
 python3 virtual_ops.py quota # 打印虚拟 quota
 python3 virtual_ops.py log # 打印虚拟 trade_log 尾部 10 行
 
@@ -55,6 +57,7 @@ python3 selftest.py # 自测（全部 PASS 才算通过）
 |---|---|
 | 查门是否开 | 读 `virtual/.trading_day`（mtime 日期 = 当日即开门，§5） |
 | 查行情 / 选股候选 | `python3 virtual_ops.py quote <代码>`，或读 `virtual/quotes.json`（8 只 B 线候选：600176、002475、000596、600919、600018、603198、000001、600000） |
+| 算数（买入前核对） | `python3 virtual_ops.py check <代码> [买价]`：涨幅/P4 限价/5 万量/偏差一次算好，AI 只读数字、不自己算（见下节 `check` 算数接口） |
 | 查额度 / 持仓 | `python3 virtual_ops.py quota`，或读 `virtual/virtual_quota.json` |
 | 查节点价 / 可卖量 | 读 `virtual/nodes.json`（节点价、手数、卖价 = 节点价×1.02） |
 | 下单 | 写订单 JSON，`python3 virtual_ops.py submit <订单JSON>` → 进 `order_queue/pending/` |
@@ -87,11 +90,33 @@ B 线触发 `SELL-<YYYYMMDD>-<代码>-<档位>-<序号>`，其余调用方自定
  "limit_price": 13.18}
 ```
 
+### check 算数接口（AI 只读数字、不自己算）
+
+用法：`python3 virtual_ops.py check <代码> [买价]`（买价不传则取当前价；只读、不下单）。
+用途：B 线买入前核对数字——AI 直接读输出的算好值，不自己算涨幅、P4 限价、可买量和偏差（防串价：上一轮对接测试里 AI 算错导致选股串价成交）。
+
+输出 JSON 字段：
+
+| 字段 | 含义 |
+|---|---|
+| `code` / `name` | 代码 / 名称 |
+| `prev_close` | 前收 |
+| `price` | 当前价 |
+| `buy_price` | 买价（未传则等于当前价） |
+| `change_pct` | 买价相对前收的涨幅（小数形式，与 quote 的 `change_pct` 同口径） |
+| `deviation_pct` | 买价相对当前价的偏差 |
+| `p4_limit` | P4 限价 = 前收×1.03（保留 2 位小数） |
+| `qty_50k` | 按 5 万上限、100 股倍数向下取整的可买量（买价过高致不足 100 股则为 0） |
+| `amount_50k` | `buy_price × qty_50k` 的金额 |
+| `gates` | 四项门染：`rise_ok`（涨幅≤5%）、`p4_ok`（买价≤P4 限价）、`deviation_ok`（偏差绝对值≤1%）、`amount_ok`（5000≤金额≤50000） |
+
+未知代码时报错，格式与 quote 一致。
+
 ### 合规校验清单（§1.5，执行器逐项校验，`result.checks` 列逐项结果）
 
 - **A 线买入**：买价 = 节点价（节点价低于跌停时按跌停价挂亦可）；金额 ≤ grid_available；单笔 ≥ 5000。
 - **A 线卖出**：卖价 = 节点价×1.02（tick 取整）；数量 ≤ 可卖量；卖价 ≤ 涨停（前收×1.10）；不与在挂卖价重复；非禁挂集群价（510300：4.316/4.324/4.325；601088：52.06）；单笔 ≥ 5000。
-- **B 线买入**：涨幅 ≤ 5%；买价 ≤ P4 限价（传入时校验）；单只 ≤ 5 万；金额 ≤ B 可用；新开仓时 B 线 ≤ 3 只；单笔 ≥ 5000。
+- **B 线买入**：涨幅 ≤ 5%；买价 ≤ P4 限价（传入时校验）；买价≈现价（偏差≤1%，超了拒绝；当前价取不到则跳过）；单只 ≤ 5 万；金额 ≤ B 可用；新开仓时 B 线 ≤ 3 只；单笔 ≥ 5000。
 - **B 线卖出**：唯一校验——数量 ≤ 持仓。
 - 不通过进 `failed/`，`result.reasons` 列明每条失败原因，`result.checks` 列逐项结果。
 
@@ -133,12 +158,14 @@ B 线触发 `SELL-<YYYYMMDD>-<代码>-<档位>-<序号>`，其余调用方自定
 
 ## 自测（`selftest.py`）
 
-跑一轮 4 项，全部 PASS 才 exit 0：
+跑一轮 6 项，全部 PASS 才 exit 0：
 
 1. A 线卖单 601088 卖 200 @49.58：合规通过、成交入账，quota/持仓/可卖/节点股数更新正确。
 2. B 线买单 600919（按虚拟行情现价）：过涨幅/P4/单只/B 线≤3 只闸门，成交入账。
 3. 错单 A 线买价 48.00（非节点价）：合规拒绝进 failed，`reasons` 指明买价非节点价，`checks` 逐项齐全。
 4. 跑后 quota 四仓平衡、快照 status ok 且不 stale、虚拟 trade_log 有 2 笔带标记的成交行。
+5. 错价单 600919 买价 = 现价×1.05（偏离现价 5%）：合规拒绝进 failed，`checks` 里“买价≈现价”项不通过，`reasons` 含“现价”。
+6. check 接口：`check 600919`（默认/显式买价=现价）输出的涨幅、P4 限价、5 万量、金额、偏差与手工重算一致；`check 600919 <现价×1.05>` 时 `deviation_ok` 为 False。
 
 ```bash
 python3 selftest.py # 全部 PASS 才算通过
@@ -146,7 +173,7 @@ python3 selftest.py # 全部 PASS 才算通过
 
 ## 已知简化（与真实系统有意的差别）
 
-- 虚拟执行器直接成交，不模拟“挂单未成交”状态（真实系统须等快照确认成交）。
+- 虚拟执行器直接成交，不模拟“挂单未成交”状态（真实系统须等快照确认成交）。虚拟执行器“合规即成交”，错价单若合规放行会直接成交，故买价≈现价是防串价的关键闸门。
 - 无 LLM 合理性复核环节（真实合规通过后走 LLM 复核，超时/失败 fail-open）。
 - 无 B 线监盘触发器（5 分钟 K 穿线检测）：B 线买单由 AI / 自测直接提交；监盘逻辑待第二步（AI 侧 skill）在虚拟行情上实现。
 - 虚拟行情为当日固定种子游走价，`init` 后不变；不模拟盘中逐笔波动。

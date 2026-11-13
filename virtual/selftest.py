@@ -11,6 +11,9 @@
      须过涨幅≤5% / P4 限价 / 单只≤5万 / B 线≤3只闸门，成交入账
   ③ 错单：A 线买价 48.00（非节点价），须合规拒绝进 failed 并写 reasons
   ④ 跑后 quota 更新正确、快照 status ok、虚拟 trade_log 有成交行
+  ⑤ 错价单：600919 买价 = 现价×1.05（偏离现价 5%），须因“买价≈现价”被拒绝进 failed
+  ⑥ check 接口：check 600919（默认/显式买价=现价）数字与手工重算一致；
+     check 600919 <现价×1.05> 时 deviation_ok 为 False
 
 用法：python3 selftest.py
 """
@@ -190,6 +193,66 @@ def main():
     check("④ 虚拟 trade_log 有 2 笔成交行且带仓位标记",
           len(fills) == 2 and has_a2_sell and has_b_buy,
           "成交行 %d 行；A2 卖行 %s，B 买行 %s" % (len(fills), has_a2_sell, has_b_buy))
+
+    # ⑤ 错价单：600919 买价 = 现价×1.05（偏离现价 5%），须因“买价≈现价”被拒绝
+    quote5 = run_ops_json("quote", "600919")
+    cur5 = quote5["price"]
+    prev5 = quote5["prev_close"]
+    wrong_price = round(cur5 * 1.05, 2)
+    qty5 = int(math.ceil(6000 / cur5 / 100.0)) * 100
+    wrong_order = {"order_id": "B-20261113-600919-wrongprice-1", "code": "600919",
+                   "side": "买入", "price": wrong_price, "qty": qty5, "line": "B",
+                   "prev_close": prev5, "limit_price": round(prev5 * 1.03, 2),
+                   "note": "自测错价单（买价偏离现价 5%）"}
+    run_ops_json("submit", write_order(wrong_order))
+    run5 = run_ops_json("run")
+    rej5 = [r for r in run5.get("rejected", []) if r["order_id"] == wrong_order["order_id"]]
+    failed5_path = os.path.join(BASE, "order_queue", "failed",
+                                wrong_order["order_id"] + ".json")
+    failed5 = json.load(open(failed5_path, encoding="utf-8")) if os.path.exists(failed5_path) else {}
+    res5 = failed5.get("result", {})
+    checks5 = res5.get("checks", [])
+    dev_item = [c for c in checks5 if c.get("item") == "买价≈现价"]
+    reasons5_txt = " ".join(res5.get("reasons", []))
+    check("⑤ 错价单被拒绝且“买价≈现价”项不通过、reasons 含现价",
+          len(rej5) == 1 and rej5[0].get("status") == "rejected"
+          and len(dev_item) == 1 and dev_item[0].get("pass") is False
+          and "现价" in reasons5_txt,
+          "price=%s cur=%s rejected=%s dev_item=%s reasons=%s"
+          % (wrong_price, cur5, rej5, dev_item, res5.get("reasons")))
+
+    # ⑥ check 接口：默认/显式买价=现价时数字与手工重算一致；买价=现价×1.05 时 deviation_ok 为 False
+    def r2_local(x):
+        return round(float(x) + 1e-9, 2)
+
+    def expect_check(buy):
+        qty50 = int(50000 // (buy * 100)) * 100
+        return {"change_pct": r2_local(buy / prev5 - 1),
+                "deviation_pct": r2_local(buy / cur5 - 1),
+                "p4_limit": round(prev5 * 1.03, 2),
+                "qty_50k": qty50, "amount_50k": r2_local(buy * qty50)}
+
+    def close(a, b):
+        return abs(a - b) <= 0.01
+
+    chk_default = run_ops_json("check", "600919")
+    chk_explicit = run_ops_json("check", "600919", str(cur5))
+    exp_cur = expect_check(cur5)
+    ok6 = all(
+        chk.get("buy_price") == cur5
+        and close(chk.get("change_pct", 1e9), exp_cur["change_pct"])
+        and close(chk.get("p4_limit", 1e9), exp_cur["p4_limit"])
+        and chk.get("qty_50k") == exp_cur["qty_50k"]
+        and close(chk.get("amount_50k", 1e9), exp_cur["amount_50k"])
+        and close(chk.get("deviation_pct", 1e9), exp_cur["deviation_pct"])
+        for chk in (chk_default, chk_explicit))
+    check("⑥ check 接口数字与手工重算一致（默认/显式买价=现价）",
+          ok6, "default=%s explicit=%s expected=%s" % (chk_default, chk_explicit, exp_cur))
+    chk_wrong = run_ops_json("check", "600919", str(wrong_price))
+    check("⑥ check 接口买价偏离现价 5% 时 deviation_ok 为 False",
+          chk_wrong.get("gates", {}).get("deviation_ok") is False,
+          "buy_price=%s deviation_pct=%s gates=%s"
+          % (chk_wrong.get("buy_price"), chk_wrong.get("deviation_pct"), chk_wrong.get("gates")))
 
     print("== 自测结果：%d 项，PASS %d，FAIL %d ==" % (
         len(RESULTS), sum(1 for _, ok, _ in RESULTS if ok),

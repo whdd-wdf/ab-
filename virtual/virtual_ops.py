@@ -19,6 +19,7 @@
 用法（北京时间）：
   python3 virtual_ops.py init                    # 初始化 / 重置虚拟状态
   python3 virtual_ops.py quote <代码>            # 查虚拟行情
+  python3 virtual_ops.py check <代码> [买价]  # 算数：涨幅/P4/5万量/偏差一次算好（AI 只读数字、不自己算）
   python3 virtual_ops.py submit <订单JSON文件>   # 写 pending
   python3 virtual_ops.py run                     # 执行器处理一轮 pending
   python3 virtual_ops.py snapshot                # 生成 fillwatch 快照
@@ -57,6 +58,7 @@ GATE_FLAG = os.path.join(BASE, ".trading_day")
 
 TRADE_LOG_HEADER = ["日期", "代码", "名称", "方向", "价格", "数量", "金额", "盈亏", "备注"]
 MIN_AMOUNT = 5000.0
+PRICE_DEV_TOL = 0.01  # §1.5：B 线买入买价相对现价的允许偏差（1%）
 B_SINGLE_LIMIT = 50000.0
 B_MAX_COUNT = 3
 STALE_SECS = 300  # §4.3：快照 timestamp 距现在 > 300 秒即 stale
@@ -309,6 +311,48 @@ def cmd_quote(args):
 
 
 # ---------------------------------------------------------------------------
+# check：算数接口（只读、不下单；AI 只读输出的数字、不自己算）
+# 用法：python3 virtual_ops.py check <代码> [买价]（买价不传则取当前价）
+# ---------------------------------------------------------------------------
+def cmd_check(args):
+    if len(args) not in (1, 2):
+        fail("用法：python3 virtual_ops.py check <代码> [买价]")
+    _require_init()
+    code = args[0]
+    quotes = load_json(QUOTES_FILE, {})
+    if code not in quotes:
+        fail("未知代码：%s（虚拟行情覆盖：%s）" % (code, ",".join(sorted(quotes))))
+    q = quotes[code]
+    prev_close = q["prev_close"]
+    price = q["price"]
+    if len(args) == 2:
+        try:
+            buy_price = float(args[1])
+        except Exception:
+            fail("买价须为数字，实为：%s" % args[1])
+        if buy_price <= 0:
+            fail("买价须 > 0")
+    else:
+        buy_price = price
+    change = r2(buy_price / prev_close - 1)
+    deviation = r2(buy_price / price - 1)
+    p4_limit = round(prev_close * 1.03, 2)
+    qty_50k = int(50000 // (buy_price * 100)) * 100
+    amount_50k = r2(buy_price * qty_50k)
+    print(json.dumps({"ok": True, "code": code, "name": q["name"],
+                      "prev_close": prev_close, "price": price,
+                      "buy_price": buy_price, "change_pct": change,
+                      "deviation_pct": deviation, "p4_limit": p4_limit,
+                      "qty_50k": qty_50k, "amount_50k": amount_50k,
+                      "gates": {"rise_ok": buy_price / prev_close - 1 <= 0.05 + 1e-9,
+                                "p4_ok": buy_price <= p4_limit + 1e-9,
+                                "deviation_ok": abs(buy_price / price - 1) <= PRICE_DEV_TOL + 1e-9,
+                                "amount_ok": MIN_AMOUNT <= amount_50k <= B_SINGLE_LIMIT + 1e-9},
+                      "virtual": True}, ensure_ascii=False))
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # submit：写 pending
 # ---------------------------------------------------------------------------
 def cmd_submit(args):
@@ -462,6 +506,13 @@ def run_compliance(order):
                 rise = price / prev_close - 1
                 check("涨幅<=5%", rise <= 0.05 + 1e-9,
                       "涨幅 %.2f%%（买价 %s，前收 %s）" % (rise * 100, price, prev_close))
+            cur = quotes.get(code, {}).get("price")
+            if cur is None:
+                check("买价≈现价", True, "跳过（当前价取不到，见 §1.5）")
+            else:
+                dev = abs(price - cur) / cur
+                check("买价≈现价", dev <= PRICE_DEV_TOL + 1e-9,
+                      "买价 %s，现价 %s，偏差 %.2f%%" % (price, cur, dev * 100))
             if "limit_price" in order and order.get("limit_price") is not None:
                 check("买价<=P4限价", price <= float(order["limit_price"]) + 1e-9,
                       "买价 %s，P4 限价 %s" % (price, order["limit_price"]))
@@ -731,7 +782,7 @@ def cmd_log(args):
 
 
 USAGE = ("用法：python3 virtual_ops.py "
-         "{init|quote <代码>|submit <订单JSON文件>|run|snapshot|quota|log [N]}")
+         "{init|quote <代码>|check <代码> [买价]|submit <订单JSON文件>|run|snapshot|quota|log [N]}")
 
 
 def main(argv):
@@ -739,7 +790,7 @@ def main(argv):
         print(USAGE, file=sys.stderr)
         return 1
     cmd, args = argv[1], argv[2:]
-    handlers = {"init": cmd_init, "quote": cmd_quote, "submit": cmd_submit,
+    handlers = {"init": cmd_init, "quote": cmd_quote, "check": cmd_check, "submit": cmd_submit,
                 "run": cmd_run, "snapshot": cmd_snapshot, "quota": cmd_quota,
                 "log": cmd_log}
     if cmd not in handlers:
