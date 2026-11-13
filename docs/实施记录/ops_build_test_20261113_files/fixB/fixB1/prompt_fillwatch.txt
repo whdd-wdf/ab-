@@ -1,0 +1,402 @@
+任务：下面是一个 Python 脚本 fillwatch_rehang.py 的自测失败输出全文、脚本全文和自测脚本全文（自测脚本规定了断言与通过标准）。请你自己定位 bug 并修复，不要问我。
+
+失败现象：自测 5 项中 4 项失败——新成交检出 1 笔、算出补挂单 1 笔、verdict=computed、已入账成交静默。仅过期快照 stale 静默 1 项通过。
+
+
+Traceback (most recent call last):
+  File "/home/user/ops-build/fillwatch_rehang.py", line 260, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/home/user/ops-build/fillwatch_rehang.py", line 237, in main
+    new_fills = detect_new_fills(snap, logged, base)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: detect_new_fills() takes 2 positional arguments but 3 were given
+
+
+import os
+import sys
+import json
+import csv
+from datetime import datetime, timezone, timedelta
+try:
+    from zoneinfo import ZoneInfo
+    TZ = ZoneInfo("Asia/Shanghai")
+except Exception:
+    TZ = timezone(timedelta(hours=8))
+MIN_AMOUNT = 5000.0
+STALE_SECS = 300
+BANNED_PRICE = {"510300": {4.316, 4.324, 4.325}, "601088": {52.06}}
+A_CODES = {"510300": "A1", "601088": "A2", "513650": "A3"}
+TICK = {"510300": 0.001, "601088": 0.01, "513650": 0.001}
+DEFAULT_TICK = 0.01
+def tick_of(code):
+    return TICK.get(code, DEFAULT_TICK)
+def load_json(path, default):
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return default
+
+import csv
+import re
+
+def is_fill(row):
+    remark = str(row.get("备注", ""))
+    if "委托中" in remark:
+        return False
+    idx = remark.find("\u3011")
+    if idx < 0:
+        return True
+    after = remark[idx + 1:].strip()
+    if after.startswith("已撤销"):
+        return False
+    return True
+
+def read_trade_log_fills(base):
+    fills = set()
+    try:
+        with open(base + "/virtual_trade_log.csv", mode='r', newline='', encoding='utf-8') as file:
+            reader = csv.DictReader(file)
+            for row in reader:
+                if row.get("方向") not in ["买入", "卖出"]:
+                    continue
+                if not is_fill(row):
+                    continue
+                remark = str(row.get("备注", ""))
+                m = re.search(r"委托价?(\d+\.\d+)", remark)
+                if m:
+                    price = float(m.group(1))
+                else:
+                    price = float(row.get("价格", 0))
+                key = (str(row.get("日期", "")), str(row.get("代码", "")), str(row.get("方向", "")), int(float(row.get("数量", 0))), price)
+                fills.add(key)
+    except FileNotFoundError:
+        return set()
+    return fills
+
+import os
+import datetime
+
+def latest_snapshot(base):
+    sdir = base + "/snapshots"
+    if not os.path.isdir(sdir):
+        return None
+    names = sorted([n for n in os.listdir(sdir) if n.startswith("fillwatch_") and n.endswith(".json")])
+    if not names:
+        return None
+    fname = names[-1]
+    data = load_json(sdir + "/" + fname, None)
+    if data is None:
+        return None
+    data["_file"] = fname
+    return data
+
+def snapshot_age_secs(snapshot):
+    ts = snapshot.get("timestamp", "")
+    if isinstance(ts, (int, float)):
+        return now().timestamp() - float(ts)
+    try:
+        dt = datetime.strptime(str(ts), "%Y-%m-%d %H:%M:%S")
+        dt = dt.replace(tzinfo=TZ)
+        return (now() - dt).total_seconds()
+    except ValueError:
+        return 10**9
+
+def detect_new_fills(snapshot, logged):
+    new = []
+    snap_date = str(snapshot.get("timestamp", ""))[:10]
+    for fill in snapshot.get("fills_today", []):
+        if fill.get("status") != "已成交":
+            continue
+        if fill.get("code") not in A_CODES:
+            continue
+        qty = int(fill.get("qty", 0))
+        price = float(fill.get("price", 0))
+        key = (snap_date, str(fill.get("code", "")), str(fill.get("side", "")), qty, price)
+        if key not in logged:
+            new.append({"code": fill.get("code"), "side": fill.get("side"), "price": price, "qty": qty, "fill_time": fill.get("time", ""), "snapshot_date": snap_date})
+    return new
+
+def compute_rehang(fill, base):
+    code = fill["code"]
+    side = fill["side"]
+    price = float(fill["price"])
+    qty = int(fill["qty"])
+    nodes = load_json(base + "/nodes.json", {})
+    tick = tick_of(code)
+    
+    if side == "卖出":
+        node_price = None
+        for node in nodes.get(code, {}).get("nodes", []):
+            if round_tick(node["node_price"] * 1.02, tick) == round_tick(price, tick):
+                node_price = node["node_price"]
+                break
+        if node_price is None:
+            return None
+        new_side = "买入"
+        new_price = round_tick(node_price, tick)
+    
+    else:  # side == "买入"
+        node_price = None
+        for node in nodes.get(code, {}).get("nodes", []):
+            if round_tick(node["node_price"], tick) == round_tick(price, tick):
+                node_price = node["node_price"]
+                break
+        if node_price is None:
+            return None
+        new_side = "卖出"
+        new_price = round_tick(node_price * 1.02, tick)
+    
+    amount = round(new_price * qty, 2)
+    dstr = str(fill.get("snapshot_date", ""))
+    if "-" in dstr:
+        dstr = dstr.replace("-", "")
+    pstr = str(new_price).replace(".", "p")
+    order_id = "FW-" + dstr + "-" + code + "-" + ("buy" if new_side == "买入" else "sell") + "-" + pstr + "-" + now_str()[0:10].replace("-", "") + now_str()[11:13] + now_str()[14:16] + now_str()[17:19]
+    return {"order_id": order_id, "code": code, "side": new_side, "price": new_price, "qty": qty, "amount": amount, "node_price": node_price, "fill_code": code, "fill_side": side, "fill_price": price}
+
+from datetime import datetime, timezone, timedelta
+try:
+    from zoneinfo import ZoneInfo
+    TZ = ZoneInfo("Asia/Shanghai")
+except Exception:
+    TZ = timezone(timedelta(hours=8))
+def now():
+    return datetime.now(TZ)
+def today_str():
+    return now().strftime("%Y-%m-%d")
+def now_str():
+    return now().strftime("%Y-%m-%d %H:%M:%S")
+def round_tick(price, tick):
+    from decimal import Decimal, ROUND_HALF_UP
+    return float(Decimal(str(price)).quantize(Decimal(str(tick)), rounding=ROUND_HALF_UP))
+
+def filter_order(order, snapshot, base):
+    code = order["code"]
+    side = order["side"]
+    price = float(order["price"])
+    qty = int(order["qty"])
+    amount = round(price * qty, 2)
+    
+    tick = tick_of(code)
+    
+    if amount < MIN_AMOUNT:
+        return (False, "small_amount")
+    
+    if round_tick(price, tick) in BANNED_PRICE.get(code, set()):
+        return (False, "banned_cluster_price")
+    
+    dup = False
+    dup_side = ""
+    for o in snapshot.get("pending", []):
+        if o.get("code") == code and o.get("side") == side and o.get("status") == "未成交" and round_tick(float(o.get("price", 0)), tick) == round_tick(price, tick):
+            dup = True
+            dup_side = side
+            break
+    
+    if side == "卖出":
+        quotes = load_json(base + "/quotes.json", {})
+        prev_close = quotes.get(code, {}).get("prev_close")
+        if prev_close is not None:
+            limit_up = round_tick(prev_close * 1.10, tick)
+        if round_tick(price, tick) > limit_up:
+            return (False, "above_limit_up")
+    
+    quota = load_json(base + "/virtual_quota.json", {})
+    qk = A_CODES.get(code, "B")
+    q = quota.get(qk, {})
+    
+    if side == "卖出":
+        sellable = q.get("holdings", {}).get(code, {}).get("sellable", 0)
+        if qty > sellable:
+            return (False, "sellable_exceeded")
+    
+    if side == "买入":
+        ga = q.get("grid_available")
+        if ga is None:
+            return (True, "note:grid_available 未取到")
+        if amount > ga:
+            return (False, "grid_available_exceeded")
+    
+    return (True, "")
+
+def main():
+    import argparse, json, sys
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--base", default="/workspace/ab-/virtual")
+    parser.add_argument("--snapshot")
+    parser.add_argument("--mode", default="compare")
+    args = parser.parse_args()
+    base = args.base
+    
+    if args.mode != "compare":
+        print(json.dumps({"ok": False, "verdict": "error", "error": "mode 只支持 compare"}, ensure_ascii=False))
+        return 1
+    
+    if args.snapshot is not None:
+        snap = load_json(args.snapshot, None)
+    else:
+        snap = latest_snapshot(base)
+    
+    if snap is None:
+        print(json.dumps({"ok": False, "verdict": "error", "error": "no_snapshot"}, ensure_ascii=False))
+        return 1
+    
+    age = snapshot_age_secs(snap)
+    if age > STALE_SECS:
+        print(json.dumps({"ok": True, "verdict": "silent", "reason": "stale_snapshot", "snapshot_time": snap.get("timestamp"), "snapshot_age_secs": age}, ensure_ascii=False))
+        return 0
+    
+    logged = read_trade_log_fills(base)
+    new_fills = detect_new_fills(snap, logged, base)
+    
+    if new_fills is None:
+        print(json.dumps({"ok": True, "verdict": "silent", "reason": "no_new_fills", "snapshot_time": snap.get("timestamp")}, ensure_ascii=False))
+        return 0
+    
+    orders = []
+    filtered = []
+    for fill in new_fills:
+        re = compute_rehang(fill, base)
+        if re is None:
+            filtered.append({"fill": fill, "reason": "node_not_found"})
+            continue
+        ok, reason = filter_order(re, snap, base)
+        if ok:
+            orders.append(re)
+        else:
+            filtered.append({"fill": fill, "reason": reason})
+    
+    print(json.dumps({"ok": True, "verdict": "computed", "new_fills": new_fills, "orders": orders, "filtered": filtered, "snapshot_time": snap.get("timestamp")}, ensure_ascii=False))
+    return 0
+
+if __name__ == "__main__":
+    sys.exit(main())
+
+
+
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""fillwatch_rehang.py 最小自测（用虚拟程序数据）。
+用法：python3 test_fillwatch.py --base /workspace/ab-/virtual
+在 /tmp 建一份虚拟目录副本跑，不碰原目录。全部 PASS 才 exit 0。"""
+import argparse
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+OPS_BUILD = os.path.dirname(HERE)
+SCRIPT = os.path.join(OPS_BUILD, "fillwatch_rehang.py")
+RESULTS = []
+
+
+def check(name, cond, detail=""):
+    RESULTS.append((name, bool(cond), detail))
+    print(("PASS" if cond else "FAIL") + " " + name + (" | " + detail if detail else ""))
+
+
+def run_cli(base, extra=None):
+    cmd = [sys.executable, SCRIPT, "--base", base, "--mode", "compare"] + (extra or [])
+    p = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+    try:
+        out = json.loads(p.stdout)
+    except Exception:
+        out = {"ok": False, "raw": p.stdout, "stderr": p.stderr}
+    return p.returncode, out
+
+
+def fresh_copy(base, tmp, name):
+    vdir = os.path.join(tmp, name)
+    shutil.copytree(base, vdir, ignore=shutil.ignore_patterns("snapshots", "__pycache__"))
+    os.makedirs(os.path.join(vdir, "snapshots"), exist_ok=True)
+    subprocess.run([sys.executable, "virtual_ops.py", "init"], cwd=vdir,
+                   capture_output=True, text=True, timeout=60, check=True)
+    return vdir
+
+
+def submit_and_fill(vdir, tmp, order):
+    of = os.path.join(tmp, order["order_id"] + ".json")
+    with open(of, "w", encoding="utf-8") as f:
+        json.dump(order, f, ensure_ascii=False)
+    p = subprocess.run([sys.executable, "virtual_ops.py", "submit", of], cwd=vdir,
+                       capture_output=True, text=True, timeout=60)
+    assert p.returncode == 0, p.stdout + p.stderr
+    p = subprocess.run([sys.executable, "virtual_ops.py", "run"], cwd=vdir,
+                       capture_output=True, text=True, timeout=120)
+    assert p.returncode == 0, p.stdout + p.stderr
+    p = subprocess.run([sys.executable, "virtual_ops.py", "snapshot"], cwd=vdir,
+                       capture_output=True, text=True, timeout=60)
+    assert p.returncode == 0, p.stdout + p.stderr
+    return json.loads(p.stdout)
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--base", required=True)
+    args = ap.parse_args()
+    tmp = tempfile.mkdtemp(prefix="vtest_fillwatch_")
+    try:
+        # 场景 1：快照有新成交、trade_log 未入账 → 检出并算出补买 200@48.61
+        vdir = fresh_copy(args.base, tmp, "v1")
+        snap = submit_and_fill(vdir, tmp, {"order_id": "T-F1", "code": "601088", "side": "卖出",
+                                            "price": 49.58, "qty": 200, "line": "A",
+                                            "prev_close": 49.10})
+        # 把 trade_log 截回仅表头，模拟“成交未入账”
+        with open(os.path.join(vdir, "virtual_trade_log.csv"), encoding="utf-8") as f:
+            header = f.readline()
+        with open(os.path.join(vdir, "virtual_trade_log.csv"), "w", encoding="utf-8") as f:
+            f.write(header)
+        rc, out = run_cli(vdir)
+        check("新成交检出 1 笔", rc == 0 and len(out.get("new_fills", [])) == 1,
+              json.dumps(out, ensure_ascii=False)[:400])
+        comp = out.get("computed_orders", [])
+        check("算出补挂单 1 笔", len(comp) == 1, json.dumps(comp, ensure_ascii=False)[:400])
+        if comp:
+            o = comp[0]
+            check("补挂是买入 200@48.61", o.get("side") == "买入" and o.get("code") == "601088"
+                  and float(o.get("price", 0)) == 48.61 and int(o.get("qty", 0)) == 200,
+                  json.dumps(o, ensure_ascii=False)[:300])
+            check("补挂 order_id 格式 FW-...-buy-48p61-...",
+                  str(o.get("order_id", "")).startswith("FW-20261113-601088-buy-48p61-"),
+                  str(o.get("order_id")))
+        check("verdict=computed", out.get("verdict") == "computed",
+              "verdict=%s" % out.get("verdict"))
+        # 场景 2：trade_log 已有该成交 → 静默 no_new_fills
+        vdir2 = fresh_copy(args.base, tmp, "v2")
+        submit_and_fill(vdir2, tmp, {"order_id": "T-F2", "code": "601088", "side": "卖出",
+                                      "price": 49.58, "qty": 200, "line": "A",
+                                      "prev_close": 49.10})
+        rc, out = run_cli(vdir2)
+        check("已入账成交静默", rc == 0 and out.get("verdict") == "silent"
+              and out.get("reason") == "no_new_fills" and out.get("new_fills") == [],
+              json.dumps(out, ensure_ascii=False)[:300])
+        # 场景 3：快照过期 → stale_snapshot 静默
+        snaps = sorted(os.listdir(os.path.join(vdir2, "snapshots")))
+        sp = os.path.join(vdir2, "snapshots", snaps[-1])
+        with open(sp, encoding="utf-8") as f:
+            s = json.load(f)
+        s["timestamp"] = "2026-11-13 08:00:00"
+        with open(sp, "w", encoding="utf-8") as f:
+            json.dump(s, f, ensure_ascii=False)
+        rc, out = run_cli(vdir2)
+        check("过期快照 stale 静默", rc == 0 and out.get("verdict") == "silent"
+              and out.get("reason") == "stale_snapshot",
+              json.dumps(out, ensure_ascii=False)[:300])
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    failed = [r for r in RESULTS if not r[1]]
+    print("合计 %d 项，失败 %d 项" % (len(RESULTS), len(failed)))
+    return 1 if failed else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+
+
+
+只输出你认为需要修改的完整函数定义（从 def 行到函数结束，完整无省略），每个函数一个 ```python 代码块。不要输出解释、不要输出未修改的函数、不要输出整个文件、不要输出代码块以外的任何文字。

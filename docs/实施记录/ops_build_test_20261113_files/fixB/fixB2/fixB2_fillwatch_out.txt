@@ -1,0 +1,16 @@
+```python
+def detect_new_fills(snapshot, logged):
+    new = []
+    snap_date = str(snapshot.get("timestamp", ""))[:10]
+    for fill in snapshot.get("fills_today", []):
+        if fill.get("status") != "已成交":
+            continue
+        if fill.get("code") not in A_CODES:
+            continue
+        qty = int(fill.get("qty", 0))
+        price = float(fill.get("price", 0))
+        key = (snap_date, str(fill.get("code", "")), str(fill.get("side", "")), qty, price)
+        if key not in logged:
+            new.append({"code": fill.get("code"), "side": fill.get("side"), "price": price, "qty": qty, "fill_time": fill.get("time", ""), "snapshot_date": snap_date})
+    return new
+```

@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/home/user/ops-build/fixB1/order_executor.py", line 320, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/home/user/ops-build/fixB1/order_executor.py", line 308, in main
+    if result.get("kind") == "filled":
+       ^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'

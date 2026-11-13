@@ -1,0 +1,9 @@
+{"log_file": "/home/user/ops-build/fixB1/run_log.jsonl",
+"jobs": [
+{"name": "FIXB1-X", "prompt_file": "/home/user/ops-build/fixB1/prompt_executor.txt",
+"out_file": "/home/user/ops-build/fixB1/fixB1_executor_out.txt",
+"num_predict": 2048, "num_ctx": 16384, "temperature": 0.2},
+{"name": "FIXB1-F", "prompt_file": "/home/user/ops-build/fixB1/prompt_fillwatch.txt",
+"out_file": "/home/user/ops-build/fixB1/fixB1_fillwatch_out.txt",
+"num_predict": 2048, "num_ctx": 16384, "temperature": 0.2}
+]}

@@ -1,0 +1,209 @@
+任务：下面是一个 Python 脚本 fillwatch_rehang.py 的自测失败输出全文、调用链上两个函数的全文和自测脚本全文（自测脚本规定了断言与通过标准）。请你自己定位 bug 并修复，不要问我。
+
+失败现象：自测 5 项中 4 项失败——新成交检出 1 笔、算出补挂单 1 笔、verdict=computed、已入账成交静默。仅过期快照 stale 静默 1 项通过。
+
+上一轮情况：上一轮模型输出的 detect_new_fills 与原文逐字相同，等于没有改，机械校验判定为未修改，重测仍是 4 项失败。
+
+
+Traceback (most recent call last):
+  File "/home/user/ops-build/fillwatch_rehang.py", line 260, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/home/user/ops-build/fillwatch_rehang.py", line 237, in main
+    new_fills = detect_new_fills(snap, logged, base)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: detect_new_fills() takes 2 positional arguments but 3 were given
+
+
+def detect_new_fills(snapshot, logged):
+    new = []
+    snap_date = str(snapshot.get("timestamp", ""))[:10]
+    for fill in snapshot.get("fills_today", []):
+        if fill.get("status") != "已成交":
+            continue
+        if fill.get("code") not in A_CODES:
+            continue
+        qty = int(fill.get("qty", 0))
+        price = float(fill.get("price", 0))
+        key = (snap_date, str(fill.get("code", "")), str(fill.get("side", "")), qty, price)
+        if key not in logged:
+            new.append({"code": fill.get("code"), "side": fill.get("side"), "price": price, "qty": qty, "fill_time": fill.get("time", ""), "snapshot_date": snap_date})
+    return new
+
+
+def main():
+    import argparse, json, sys
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--base", default="/workspace/ab-/virtual")
+    parser.add_argument("--snapshot")
+    parser.add_argument("--mode", default="compare")
+    args = parser.parse_args()
+    base = args.base
+    
+    if args.mode != "compare":
+        print(json.dumps({"ok": False, "verdict": "error", "error": "mode 只支持 compare"}, ensure_ascii=False))
+        return 1
+    
+    if args.snapshot is not None:
+        snap = load_json(args.snapshot, None)
+    else:
+        snap = latest_snapshot(base)
+    
+    if snap is None:
+        print(json.dumps({"ok": False, "verdict": "error", "error": "no_snapshot"}, ensure_ascii=False))
+        return 1
+    
+    age = snapshot_age_secs(snap)
+    if age > STALE_SECS:
+        print(json.dumps({"ok": True, "verdict": "silent", "reason": "stale_snapshot", "snapshot_time": snap.get("timestamp"), "snapshot_age_secs": age}, ensure_ascii=False))
+        return 0
+    
+    logged = read_trade_log_fills(base)
+    new_fills = detect_new_fills(snap, logged, base)
+    
+    if new_fills is None:
+        print(json.dumps({"ok": True, "verdict": "silent", "reason": "no_new_fills", "snapshot_time": snap.get("timestamp")}, ensure_ascii=False))
+        return 0
+    
+    orders = []
+    filtered = []
+    for fill in new_fills:
+        re = compute_rehang(fill, base)
+        if re is None:
+            filtered.append({"fill": fill, "reason": "node_not_found"})
+            continue
+        ok, reason = filter_order(re, snap, base)
+        if ok:
+            orders.append(re)
+        else:
+            filtered.append({"fill": fill, "reason": reason})
+    
+    print(json.dumps({"ok": True, "verdict": "computed", "new_fills": new_fills, "orders": orders, "filtered": filtered, "snapshot_time": snap.get("timestamp")}, ensure_ascii=False))
+    return 0
+
+
+
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""fillwatch_rehang.py 最小自测（用虚拟程序数据）。
+用法：python3 test_fillwatch.py --base /workspace/ab-/virtual
+在 /tmp 建一份虚拟目录副本跑，不碰原目录。全部 PASS 才 exit 0。"""
+import argparse
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+OPS_BUILD = os.path.dirname(HERE)
+SCRIPT = os.path.join(OPS_BUILD, "fillwatch_rehang.py")
+RESULTS = []
+
+
+def check(name, cond, detail=""):
+    RESULTS.append((name, bool(cond), detail))
+    print(("PASS" if cond else "FAIL") + " " + name + (" | " + detail if detail else ""))
+
+
+def run_cli(base, extra=None):
+    cmd = [sys.executable, SCRIPT, "--base", base, "--mode", "compare"] + (extra or [])
+    p = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+    try:
+        out = json.loads(p.stdout)
+    except Exception:
+        out = {"ok": False, "raw": p.stdout, "stderr": p.stderr}
+    return p.returncode, out
+
+
+def fresh_copy(base, tmp, name):
+    vdir = os.path.join(tmp, name)
+    shutil.copytree(base, vdir, ignore=shutil.ignore_patterns("snapshots", "__pycache__"))
+    os.makedirs(os.path.join(vdir, "snapshots"), exist_ok=True)
+    subprocess.run([sys.executable, "virtual_ops.py", "init"], cwd=vdir,
+                   capture_output=True, text=True, timeout=60, check=True)
+    return vdir
+
+
+def submit_and_fill(vdir, tmp, order):
+    of = os.path.join(tmp, order["order_id"] + ".json")
+    with open(of, "w", encoding="utf-8") as f:
+        json.dump(order, f, ensure_ascii=False)
+    p = subprocess.run([sys.executable, "virtual_ops.py", "submit", of], cwd=vdir,
+                       capture_output=True, text=True, timeout=60)
+    assert p.returncode == 0, p.stdout + p.stderr
+    p = subprocess.run([sys.executable, "virtual_ops.py", "run"], cwd=vdir,
+                       capture_output=True, text=True, timeout=120)
+    assert p.returncode == 0, p.stdout + p.stderr
+    p = subprocess.run([sys.executable, "virtual_ops.py", "snapshot"], cwd=vdir,
+                       capture_output=True, text=True, timeout=60)
+    assert p.returncode == 0, p.stdout + p.stderr
+    return json.loads(p.stdout)
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--base", required=True)
+    args = ap.parse_args()
+    tmp = tempfile.mkdtemp(prefix="vtest_fillwatch_")
+    try:
+        # 场景 1：快照有新成交、trade_log 未入账 → 检出并算出补买 200@48.61
+        vdir = fresh_copy(args.base, tmp, "v1")
+        snap = submit_and_fill(vdir, tmp, {"order_id": "T-F1", "code": "601088", "side": "卖出",
+                                            "price": 49.58, "qty": 200, "line": "A",
+                                            "prev_close": 49.10})
+        # 把 trade_log 截回仅表头，模拟“成交未入账”
+        with open(os.path.join(vdir, "virtual_trade_log.csv"), encoding="utf-8") as f:
+            header = f.readline()
+        with open(os.path.join(vdir, "virtual_trade_log.csv"), "w", encoding="utf-8") as f:
+            f.write(header)
+        rc, out = run_cli(vdir)
+        check("新成交检出 1 笔", rc == 0 and len(out.get("new_fills", [])) == 1,
+              json.dumps(out, ensure_ascii=False)[:400])
+        comp = out.get("computed_orders", [])
+        check("算出补挂单 1 笔", len(comp) == 1, json.dumps(comp, ensure_ascii=False)[:400])
+        if comp:
+            o = comp[0]
+            check("补挂是买入 200@48.61", o.get("side") == "买入" and o.get("code") == "601088"
+                  and float(o.get("price", 0)) == 48.61 and int(o.get("qty", 0)) == 200,
+                  json.dumps(o, ensure_ascii=False)[:300])
+            check("补挂 order_id 格式 FW-...-buy-48p61-...",
+                  str(o.get("order_id", "")).startswith("FW-20261113-601088-buy-48p61-"),
+                  str(o.get("order_id")))
+        check("verdict=computed", out.get("verdict") == "computed",
+              "verdict=%s" % out.get("verdict"))
+        # 场景 2：trade_log 已有该成交 → 静默 no_new_fills
+        vdir2 = fresh_copy(args.base, tmp, "v2")
+        submit_and_fill(vdir2, tmp, {"order_id": "T-F2", "code": "601088", "side": "卖出",
+                                      "price": 49.58, "qty": 200, "line": "A",
+                                      "prev_close": 49.10})
+        rc, out = run_cli(vdir2)
+        check("已入账成交静默", rc == 0 and out.get("verdict") == "silent"
+              and out.get("reason") == "no_new_fills" and out.get("new_fills") == [],
+              json.dumps(out, ensure_ascii=False)[:300])
+        # 场景 3：快照过期 → stale_snapshot 静默
+        snaps = sorted(os.listdir(os.path.join(vdir2, "snapshots")))
+        sp = os.path.join(vdir2, "snapshots", snaps[-1])
+        with open(sp, encoding="utf-8") as f:
+            s = json.load(f)
+        s["timestamp"] = "2026-11-13 08:00:00"
+        with open(sp, "w", encoding="utf-8") as f:
+            json.dump(s, f, ensure_ascii=False)
+        rc, out = run_cli(vdir2)
+        check("过期快照 stale 静默", rc == 0 and out.get("verdict") == "silent"
+              and out.get("reason") == "stale_snapshot",
+              json.dumps(out, ensure_ascii=False)[:300])
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    failed = [r for r in RESULTS if not r[1]]
+    print("合计 %d 项，失败 %d 项" % (len(RESULTS), len(failed)))
+    return 1 if failed else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+
+
+
+只输出你认为需要修改的完整函数定义（从 def 行到函数结束，完整无省略），每个函数一个 ```python 代码块。不要输出解释、不要输出未修改的函数、不要输出整个文件、不要输出代码块以外的任何文字。

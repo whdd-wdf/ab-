@@ -1,0 +1,14 @@
+Traceback (most recent call last):
+  File "/home/user/ops-build/order_executor.py", line 317, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/home/user/ops-build/order_executor.py", line 303, in main
+    result = process_one(src, base, compliance_script)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/ops-build/order_executor.py", line 236, in process_one
+    return move_order(src_path, base, "done", result)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/ops-build/order_executor.py", line 66, in move_order
+    with open(src_path, 'r', encoding='utf-8') as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+IsADirectoryError: [Errno 21] Is a directory: '/tmp/vx/virtual'
