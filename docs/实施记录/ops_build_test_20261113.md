@@ -193,3 +193,56 @@
 
 - `docs/实施记录/ops_build_test_20261113_files/fixB/`：FIX_B_ROUNDS_20261113.md、fixB0/（基线自测日志 + 两份完整 traceback）、fixB1/、fixB2/（各含四脚本 + 两份 AI 输出 + 提示词 + 自测；其中 *.log/*.jsonl 按 .gitignore 只留沙箱、不进 GitHub）。
 - 盒子已休眠（协调员统一休眠，box_status 核实为 hibernated）。
+
+## 笔记本搭建（2026-11-13）
+
+盒内两轮（3B、7B coder）均失败后，改在笔记本上用 Claude Code CLI 接入 API 级模型，只凭 GitHub 文档与虚拟程序重做同一任务：读文档、写四脚本、跑基线、对接验证。结果一次搭通。
+
+### 模型与 Agent
+
+- **模型**：DeepSeek-V4.1-Flash，经 FCC（Coarena）。完整模型 ID 为 `anthropic/custom_11c1cd762ab64b7abf5df581d358f2fb/deepseek-v4-1-flash-1017`。核实方法：FCC 服务日志 `~/.fcc/logs/server.log` 的 `request.completed` 记录显示 provider 为 `custom_11c1cd762ab64b7abf5df581d358f2fb`、model 为 `deepseek-v4-1-flash-1017`。
+- **教训**：裸名 `deepseek-v4-1-flash-1017` 会被 Claude Code 标 unrecognized_model 并由 FCC 回退到默认模型 `nemotron-3-ultra-550b-a55b`（冒烟实测证实），必须用完整前缀 ID；unrecognized_model 警告本身不影响路由。
+- **Agent**：Claude Code CLI 2.1.323，经 `~/.local/bin/fcc-claude` 启动器（注入 FCC 代理环境）启动，`-p` 非交互模式，stdin 传提示词，nohup 后台跑、短命令轮询。
+
+### 步骤 1：读文档
+
+写出 `step1_recap.md`（28919 字节），四脚本职责复述经抽查与接口规范一致。
+
+### 步骤 2：写四脚本
+
+`order_compliance.py`、`order_executor.py`、`gate_local.py`、`fillwatch_rehang.py`（仅标准库，均有 `__main__` 入口），`py_compile` 4/4 通过；md5 与盒内原版不同，非复制。
+
+### 步骤 3：基线（真基线）
+
+合规 4/4、执行器 16/16、门控 9/9、fillwatch 7/7，合计 **36/36 = 100%**。
+
+分母说明：预案写 32（执行器 14、fillwatch 5）是按盒内跑通时的计分（条件检查跳过时分母变小）；克隆内自测文件全通过时共 36 项（执行器 16、fillwatch 7），36/36 = 100%，超过 80% 门槛（26/32）。
+
+### 步骤 4：调试迭代
+
+**0 轮**。基线已全绿，无 bug 可修，无 fixC 轮次副本。
+
+### 步骤 5：对接验证（全部 PASS）
+
+- A 线卖单 601088 卖 200 @49.58 与 B 线买单 600919 @12.98 500 股；合规两单均通过。
+- 执行器 processed 2、filled 2、rejected 0。
+- 快照 status ok、timestamp 2026-11-13 09:19:23、age 约 12 秒、不 stale。
+- quota 四仓平衡：A1/A2/A3/B 的 available=quota-deployed、grid_available=grid_quota-deployed 均成立；A2 deployed 49205.53、quota 167708.27、pnl 1041.60；B deployed 6490.00、持 600919 500 股。
+- 虚拟 trade_log 2 笔成交行：【A2】卖出 601088 200@49.58、盈亏 74.89；【B线】买入 600919 500@12.98。
+- 节点 48.61 hands 2→0、sell_price null。
+- fillwatch 在已入账状态下 silent/no_new_fills；trade_log 截回表头后检出新成交 1 笔并算出补买单 `FW-20261113-601088-buy-48p61-20261113091923`（买入 200@48.61）。
+
+### 假时间说明（如实记录）
+
+自测与对接在真实时间 17:18 之后跑，当时已过 07:30–17:05 门控窗口。真实时间跑基线为 **21/31**，失败全系窗口已过（执行器 gate-closed、虚拟 run 不成交），非脚本 bug。真基线与对接改用 `PYTHONTZPATH=/tmp/faketz/zone`（`ZoneInfo('Asia/Shanghai')` 被替换为 UTC0 的假时区文件，假本地时间约 09:18–09:19，与真实日期同一天）；脚本本身未改；窗口逻辑本身被门控自测的过期标志等项覆盖。
+
+### 完整结论：能
+
+依据：只凭 GitHub 文档与虚拟程序，笔记本上的 Claude Code 加 DeepSeek-V4.1-Flash 一次写出四脚本，基线 36/36、对接全过。与盒内两轮（一次性调用、无工具迭代、最高 71.9%）对比，本轮胜在带工具闭环（读文件、跑测试、迭代）加显式契约提示词加 API 级模型。
+
+边界：本次未做真实下单（`laptop_order.py` 不在范围）、未在真实交易时段跑（见假时间说明）、未验证真实华为路径（`/root/monitor`）。
+
+### 笔记本搭建产物
+
+- `docs/实施记录/ops_build_test_20261113_files/laptop/`：四脚本（原文件复制）+ TEST_RESULTS.md（基线四项自测输出要点与对接验证逐项结果）；不放任何 .log/.jsonl，不进 GitHub。
+- 本报告章节：本节。
