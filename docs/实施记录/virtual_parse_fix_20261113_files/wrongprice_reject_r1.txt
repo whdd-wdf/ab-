@@ -1,0 +1,34 @@
+# 错价单拦截验证（复测后程序侧直接验证，盒内执行）
+
+时间：2026-11-13 约 13:26 CST（复测主流程结束后，虚拟环境内追加验证）
+环境：Simular Box main，/workspace/ab-（HEAD 83f51fa），仅操作 virtual/ 内虚拟文件。
+
+## 1. check 600919 @13.63（错价：现价 12.98，P4 限价 13.18）
+
+命令：python3 virtual/virtual_ops.py check 600919 13.63
+
+{"ok": true, "code": "600919", "name": "江苏银行", "prev_close": 12.8, "price": 12.98, "buy_price": 13.63, "change_pct": 0.0648, "deviation_pct": 0.0501, "p4_limit": 13.18, "qty_50k": 3600, "amount_50k": 49068.0, "gates": {"rise_ok": false, "p4_ok": false, "deviation_ok": false, "amount_ok": true}, "virtual": true}
+
+核实：deviation_ok=false（偏差 5.01%），rise_ok=false（涨幅 6.48%＞5%），p4_ok=false（13.63＞13.18）。check 层三项不通过。
+
+## 2. submit 错价单（submit 只写 pending，不做合规；合规在 run 层）
+
+订单 TEST-WRONG-1：600919 买入 13.63×3800，prev_close 12.80，limit_price 13.18。
+
+{"ok": true, "action": "submit", "order_id": "TEST-WRONG-1", "status": "pending", "virtual": true}
+
+注：第一次曾误把订单 JSON 当文件路径传，报“订单文件不存在”；改为先写 /tmp/wrong_order.json 再 submit 文件路径后成功。submit 本身不拦截，符合设计（拦截在 run）。
+
+## 3. run 执行器（拦截发生处）
+
+{"ok": true, "action": "run", "date": "2026-11-13", "processed": 1, "filled": [], "rejected": [{"order_id": "TEST-WRONG-1", "status": "rejected", "reasons": ["涨幅<=5%：涨幅 6.48%（买价 13.63，前收 12.8）", "买价≈现价：买价 13.63，现价 12.98，偏差 5.01%", "买价<=P4限价：买价 13.63，P4 限价 13.18", "单只<=5万：金额 51794.0"]}], "gate_closed": []}
+
+核实：错价单被执行器拒绝，四条理由齐全；订单移入 order_queue/failed/TEST-WRONG-1.json；pending 为空。
+
+## 4. 拒绝后状态未被污染
+
+- 虚拟 trade_log（virtual/virtual_trade_log.csv）仍只有 1 行成交：2026-11-13,600176,中国巨石,买入,10.46,4700,49162.00,,买入成交（委托10.46；委托10.46，2026-11-13 13:23:15成交；订单B-20261113-600176-1；虚拟成交）
+- quota B 线：deployed 49162.0，available 441179.72，holdings {600176: qty 4700, sellable 0, avg_cost 10.46}，与错价单提交前一致；deployed + available = 490341.72 = B 线 quota，平衡。
+- order_queue/done/：B-20261113-600176-1.json（主流程成交单）；order_queue/failed/：TEST-WRONG-1.json。
+
+结论：错价单仍被程序侧拦截（check 三项不通过 + run 四理由拒绝），未成交、未入账、未动 quota。

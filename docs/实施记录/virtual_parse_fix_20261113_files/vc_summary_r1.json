@@ -1,0 +1,148 @@
+{
+  "started_cst": "2026-11-13 13:21:11",
+  "steps": {
+    "precheck": {
+      "ok": true,
+      "codes": [
+        "000001",
+        "000596",
+        "002475",
+        "600000",
+        "600018",
+        "600176",
+        "600919",
+        "603198"
+      ]
+    },
+    "A_pick": {
+      "seconds": 85.66212749481201,
+      "attempts": 1,
+      "ok": true,
+      "parse": "定稿行：代码已抓/买入价已抓/数量已抓",
+      "price_qty_derived": false,
+      "rationale_warning": null,
+      "triple": {
+        "code": "600176",
+        "name": "中国巨石",
+        "price": 10.46
+      },
+      "triple_ok": true
+    },
+    "B_gate": {
+      "seconds": 9.89609432220459,
+      "attempts": 1,
+      "ok": true
+    },
+    "C_con": {
+      "seconds": 6.096002101898193,
+      "attempts": 1,
+      "ok": true
+    },
+    "C_pro": {
+      "seconds": 8.54861569404602,
+      "attempts": 1,
+      "ok": true
+    },
+    "C_judge": {
+      "seconds": 12.7732834815979,
+      "attempts": 1,
+      "ok": true
+    },
+    "D_confirm": {
+      "seconds": 14.01512098312378,
+      "attempts": 1,
+      "ok": true
+    }
+  },
+  "dry_run": false,
+  "dry_run_bad_triple": false,
+  "gate_open": true,
+  "b_available": 490341.72,
+  "pick": {
+    "code": "600176",
+    "name": "中国巨石",
+    "price": 10.46,
+    "qty": 4700,
+    "amount": 49162.0,
+    "prev_close": 10.52,
+    "p4": 10.84,
+    "triple_ok": true
+  },
+  "gate_ai": "通过",
+  "pre_debate_check": {
+    "ok": true,
+    "failures": [],
+    "check": {
+      "ok": true,
+      "code": "600176",
+      "name": "中国巨石",
+      "prev_close": 10.52,
+      "price": 10.46,
+      "buy_price": 10.46,
+      "change_pct": -0.0057,
+      "deviation_pct": 0.0,
+      "p4_limit": 10.84,
+      "qty_50k": 4700,
+      "amount_50k": 49162.0,
+      "gates": {
+        "rise_ok": true,
+        "p4_ok": true,
+        "deviation_ok": true,
+        "amount_ok": true
+      },
+      "virtual": true
+    }
+  },
+  "debate": {
+    "verdict": "买",
+    "confidence": 0.85
+  },
+  "submit": {
+    "submitted": true,
+    "order": {
+      "order_id": "B-20261113-600176-1",
+      "code": "600176",
+      "side": "买入",
+      "price": 10.46,
+      "qty": 4700,
+      "line": "B",
+      "prev_close": 10.52,
+      "limit_price": 10.84
+    },
+    "submit_cst": "2026-11-13 13:23:15",
+    "snapshot_cst": "2026-11-13 13:23:15",
+    "delay_seconds": 0.283773,
+    "snapshot_file": "fillwatch_20261113_1323.json",
+    "snapshot": {
+      "label": "fillwatch",
+      "timestamp": "2026-11-13 13:23:15",
+      "status": "ok",
+      "orders": [
+        {
+          "order_id": "B-20261113-600176-1",
+          "code": "600176",
+          "name": "中国巨石",
+          "side": "买入",
+          "price": 10.46,
+          "qty": 4700,
+          "time": "2026-11-13 13:23:15",
+          "status": "已成交"
+        }
+      ],
+      "fills_today": [
+        {
+          "order_id": "B-20261113-600176-1",
+          "code": "600176",
+          "name": "中国巨石",
+          "side": "买入",
+          "price": 10.46,
+          "qty": 4700,
+          "time": "2026-11-13 13:23:15",
+          "status": "已成交"
+        }
+      ],
+      "pending": []
+    },
+    "ai_confirmed": false
+  }
+}
