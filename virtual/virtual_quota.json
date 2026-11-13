@@ -1,0 +1,60 @@
+{
+  "A1": {
+    "code": "510300",
+    "quota": 166400.49,
+    "deployed": 129384.11,
+    "pnl": -266.18,
+    "available": 37016.38,
+    "grid_quota": 141440.42,
+    "grid_available": 12056.3,
+    "holdings": {
+      "510300": {
+        "qty": 30800,
+        "sellable": 22200,
+        "avg_cost": 4.2008
+      }
+    }
+  },
+  "A2": {
+    "code": "601088",
+    "quota": 167633.38,
+    "deployed": 59046.64,
+    "pnl": 966.71,
+    "available": 108586.74,
+    "grid_quota": 142488.37,
+    "grid_available": 83441.73,
+    "holdings": {
+      "601088": {
+        "qty": 1200,
+        "sellable": 700,
+        "avg_cost": 49.2055
+      }
+    }
+  },
+  "A3": {
+    "code": "513650",
+    "quota": 166666.67,
+    "deployed": 65522.04,
+    "pnl": 0.0,
+    "available": 101144.63,
+    "grid_quota": 141666.67,
+    "grid_available": 76144.63,
+    "holdings": {
+      "513650": {
+        "qty": 33000,
+        "sellable": 33000,
+        "avg_cost": 1.9855
+      }
+    }
+  },
+  "B": {
+    "code": null,
+    "quota": 490341.72,
+    "deployed": 0.0,
+    "pnl": -9658.28,
+    "available": 490341.72,
+    "grid_quota": 416790.46,
+    "grid_available": 416790.46,
+    "holdings": {}
+  }
+}

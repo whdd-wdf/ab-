@@ -1,0 +1,773 @@
+{
+  "510300": {
+    "line": "A1",
+    "name": "300ETF",
+    "cost": 4.2,
+    "nodes": [
+      {
+        "node_price": 3.004,
+        "cost_price": 4.2,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 3.064,
+        "cost_price": 4.2,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 3.125,
+        "cost_price": 4.2,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 3.187,
+        "cost_price": 4.2,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 3.251,
+        "cost_price": 4.2,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 3.316,
+        "cost_price": 4.2,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 3.382,
+        "cost_price": 4.2,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 3.45,
+        "cost_price": 4.2,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 3.519,
+        "cost_price": 4.2,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 3.589,
+        "cost_price": 4.2,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 3.661,
+        "cost_price": 4.2,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 3.733,
+        "cost_price": 4.2,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 3.808,
+        "cost_price": 4.2,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 3.884,
+        "cost_price": 4.2,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 3.962,
+        "cost_price": 4.2,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 4.041,
+        "cost_price": 4.2,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 4.122,
+        "cost_price": 4.2,
+        "hands": 18,
+        "sell_price": 4.204
+      },
+      {
+        "node_price": 4.204,
+        "cost_price": 4.2,
+        "hands": 18,
+        "sell_price": 4.288
+      },
+      {
+        "node_price": 4.288,
+        "cost_price": 4.2,
+        "hands": 17,
+        "sell_price": 4.374
+      },
+      {
+        "node_price": 4.374,
+        "cost_price": 4.2,
+        "hands": 17,
+        "sell_price": 4.461
+      },
+      {
+        "node_price": 4.461,
+        "cost_price": 4.2,
+        "hands": 16,
+        "sell_price": 4.55
+      },
+      {
+        "node_price": 4.55,
+        "cost_price": 4.2,
+        "hands": 16,
+        "sell_price": 4.641
+      },
+      {
+        "node_price": 4.641,
+        "cost_price": 4.2,
+        "hands": 16,
+        "sell_price": 4.734
+      },
+      {
+        "node_price": 4.734,
+        "cost_price": 4.2,
+        "hands": 15,
+        "sell_price": 4.829
+      },
+      {
+        "node_price": 4.829,
+        "cost_price": 4.2,
+        "hands": 15,
+        "sell_price": 4.926
+      },
+      {
+        "node_price": 4.926,
+        "cost_price": 4.2,
+        "hands": 14,
+        "sell_price": 5.025
+      },
+      {
+        "node_price": 5.025,
+        "cost_price": 4.2,
+        "hands": 14,
+        "sell_price": 5.126
+      },
+      {
+        "node_price": 5.126,
+        "cost_price": 4.2,
+        "hands": 14,
+        "sell_price": 5.229
+      },
+      {
+        "node_price": 5.229,
+        "cost_price": 4.2,
+        "hands": 13,
+        "sell_price": 5.334
+      },
+      {
+        "node_price": 5.334,
+        "cost_price": 4.2,
+        "hands": 13,
+        "sell_price": 5.441
+      },
+      {
+        "node_price": 5.441,
+        "cost_price": 4.2,
+        "hands": 12,
+        "sell_price": 5.55
+      },
+      {
+        "node_price": 5.55,
+        "cost_price": 4.2,
+        "hands": 12,
+        "sell_price": 5.661
+      },
+      {
+        "node_price": 5.661,
+        "cost_price": 4.2,
+        "hands": 11,
+        "sell_price": 5.774
+      },
+      {
+        "node_price": 5.774,
+        "cost_price": 4.2,
+        "hands": 11,
+        "sell_price": 5.889
+      },
+      {
+        "node_price": 5.889,
+        "cost_price": 4.2,
+        "hands": 11,
+        "sell_price": 6.007
+      },
+      {
+        "node_price": 6.007,
+        "cost_price": 4.2,
+        "hands": 10,
+        "sell_price": 6.127
+      },
+      {
+        "node_price": 6.127,
+        "cost_price": 4.2,
+        "hands": 9,
+        "sell_price": 6.25
+      },
+      {
+        "node_price": 6.25,
+        "cost_price": 4.2,
+        "hands": 8,
+        "sell_price": 6.375
+      },
+      {
+        "node_price": 6.375,
+        "cost_price": 4.2,
+        "hands": 8,
+        "sell_price": 6.503
+      }
+    ]
+  },
+  "601088": {
+    "line": "A2",
+    "name": "中国神华",
+    "cost": 49.2,
+    "nodes": [
+      {
+        "node_price": 28.48,
+        "cost_price": 49.2,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 29.05,
+        "cost_price": 49.2,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 29.63,
+        "cost_price": 49.2,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 30.22,
+        "cost_price": 49.2,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 30.83,
+        "cost_price": 49.2,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 31.45,
+        "cost_price": 49.2,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 32.07,
+        "cost_price": 49.2,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 32.72,
+        "cost_price": 49.2,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 33.37,
+        "cost_price": 49.2,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 34.04,
+        "cost_price": 49.2,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 34.72,
+        "cost_price": 49.2,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 35.41,
+        "cost_price": 49.2,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 36.12,
+        "cost_price": 49.2,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 36.84,
+        "cost_price": 49.2,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 37.58,
+        "cost_price": 49.2,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 38.33,
+        "cost_price": 49.2,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 39.1,
+        "cost_price": 49.2,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 39.88,
+        "cost_price": 49.2,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 40.68,
+        "cost_price": 49.2,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 41.49,
+        "cost_price": 49.2,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 42.32,
+        "cost_price": 49.2,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 43.17,
+        "cost_price": 49.2,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 44.03,
+        "cost_price": 49.2,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 44.91,
+        "cost_price": 49.2,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 45.81,
+        "cost_price": 49.2,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 46.73,
+        "cost_price": 49.2,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 47.66,
+        "cost_price": 49.2,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 48.61,
+        "cost_price": 49.2,
+        "hands": 2,
+        "sell_price": 49.58
+      },
+      {
+        "node_price": 49.59,
+        "cost_price": 49.2,
+        "hands": 2,
+        "sell_price": 50.58
+      },
+      {
+        "node_price": 50.58,
+        "cost_price": 49.2,
+        "hands": 1,
+        "sell_price": 51.59
+      },
+      {
+        "node_price": 51.59,
+        "cost_price": 49.2,
+        "hands": 1,
+        "sell_price": 52.62
+      },
+      {
+        "node_price": 52.62,
+        "cost_price": 49.2,
+        "hands": 1,
+        "sell_price": 53.67
+      },
+      {
+        "node_price": 53.67,
+        "cost_price": 49.2,
+        "hands": 1,
+        "sell_price": 54.74
+      },
+      {
+        "node_price": 54.74,
+        "cost_price": 49.2,
+        "hands": 1,
+        "sell_price": 55.83
+      },
+      {
+        "node_price": 55.84,
+        "cost_price": 49.2,
+        "hands": 1,
+        "sell_price": 56.96
+      },
+      {
+        "node_price": 56.96,
+        "cost_price": 49.2,
+        "hands": 1,
+        "sell_price": 58.1
+      },
+      {
+        "node_price": 58.1,
+        "cost_price": 49.2,
+        "hands": 1,
+        "sell_price": 59.26
+      },
+      {
+        "node_price": 59.26,
+        "cost_price": 49.2,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 60.45,
+        "cost_price": 49.2,
+        "hands": 0,
+        "sell_price": null
+      }
+    ]
+  },
+  "513650": {
+    "line": "A3",
+    "name": "标普ETF",
+    "cost": 1.985,
+    "nodes": [
+      {
+        "node_price": 0.977,
+        "cost_price": 1.985,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 0.997,
+        "cost_price": 1.985,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 1.017,
+        "cost_price": 1.985,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 1.037,
+        "cost_price": 1.985,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 1.058,
+        "cost_price": 1.985,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 1.079,
+        "cost_price": 1.985,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 1.101,
+        "cost_price": 1.985,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 1.123,
+        "cost_price": 1.985,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 1.145,
+        "cost_price": 1.985,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 1.168,
+        "cost_price": 1.985,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 1.191,
+        "cost_price": 1.985,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 1.215,
+        "cost_price": 1.985,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 1.239,
+        "cost_price": 1.985,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 1.264,
+        "cost_price": 1.985,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 1.289,
+        "cost_price": 1.985,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 1.315,
+        "cost_price": 1.985,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 1.341,
+        "cost_price": 1.985,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 1.368,
+        "cost_price": 1.985,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 1.395,
+        "cost_price": 1.985,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 1.423,
+        "cost_price": 1.985,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 1.451,
+        "cost_price": 1.985,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 1.48,
+        "cost_price": 1.985,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 1.51,
+        "cost_price": 1.985,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 1.54,
+        "cost_price": 1.985,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 1.571,
+        "cost_price": 1.985,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 1.602,
+        "cost_price": 1.985,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 1.634,
+        "cost_price": 1.985,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 1.667,
+        "cost_price": 1.985,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 1.7,
+        "cost_price": 1.985,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 1.734,
+        "cost_price": 1.985,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 1.769,
+        "cost_price": 1.985,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 1.804,
+        "cost_price": 1.985,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 1.84,
+        "cost_price": 1.985,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 1.877,
+        "cost_price": 1.985,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 1.915,
+        "cost_price": 1.985,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 1.953,
+        "cost_price": 1.985,
+        "hands": 0,
+        "sell_price": null
+      },
+      {
+        "node_price": 1.992,
+        "cost_price": 1.985,
+        "hands": 30,
+        "sell_price": 2.032
+      },
+      {
+        "node_price": 2.032,
+        "cost_price": 1.985,
+        "hands": 30,
+        "sell_price": 2.073
+      },
+      {
+        "node_price": 2.073,
+        "cost_price": 1.985,
+        "hands": 30,
+        "sell_price": 2.114
+      },
+      {
+        "node_price": 2.114,
+        "cost_price": 1.985,
+        "hands": 30,
+        "sell_price": 2.156
+      },
+      {
+        "node_price": 2.156,
+        "cost_price": 1.985,
+        "hands": 30,
+        "sell_price": 2.199
+      },
+      {
+        "node_price": 2.199,
+        "cost_price": 1.985,
+        "hands": 30,
+        "sell_price": 2.243
+      },
+      {
+        "node_price": 2.243,
+        "cost_price": 1.985,
+        "hands": 30,
+        "sell_price": 2.288
+      },
+      {
+        "node_price": 2.288,
+        "cost_price": 1.985,
+        "hands": 30,
+        "sell_price": 2.334
+      },
+      {
+        "node_price": 2.334,
+        "cost_price": 1.985,
+        "hands": 30,
+        "sell_price": 2.381
+      },
+      {
+        "node_price": 2.381,
+        "cost_price": 1.985,
+        "hands": 30,
+        "sell_price": 2.429
+      },
+      {
+        "node_price": 2.429,
+        "cost_price": 1.985,
+        "hands": 30,
+        "sell_price": 2.478
+      }
+    ]
+  }
+}
