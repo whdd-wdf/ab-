@@ -225,10 +225,13 @@ def main():
     def r2_local(x):
         return round(float(x) + 1e-9, 2)
 
+    def r4_local(x):
+        return round(float(x) + 1e-9, 4)
+
     def expect_check(buy):
         qty50 = int(50000 // (buy * 100)) * 100
-        return {"change_pct": r2_local(buy / prev5 - 1),
-                "deviation_pct": r2_local(buy / cur5 - 1),
+        return {"change_pct": r4_local(buy / prev5 - 1),
+                "deviation_pct": r4_local(buy / cur5 - 1),
                 "p4_limit": round(prev5 * 1.03, 2),
                 "qty_50k": qty50, "amount_50k": r2_local(buy * qty50)}
 
@@ -253,6 +256,13 @@ def main():
           chk_wrong.get("gates", {}).get("deviation_ok") is False,
           "buy_price=%s deviation_pct=%s gates=%s"
           % (chk_wrong.get("buy_price"), chk_wrong.get("deviation_pct"), chk_wrong.get("gates")))
+
+    # ⑦ check 涨幅显示精度：change_pct 与手工重算一致到 0.01%（百分点）
+    raw_change = (cur5 / prev5 - 1) * 100
+    shown_change = chk_default.get("change_pct", 1e9) * 100
+    check("⑦ check 涨幅显示与手工重算一致到 0.01%",
+          abs(shown_change - raw_change) <= 0.01,
+          "shown=%.4f%% raw=%.4f%%" % (shown_change, raw_change))
 
     print("== 自测结果：%d 项，PASS %d，FAIL %d ==" % (
         len(RESULTS), sum(1 for _, ok, _ in RESULTS if ok),

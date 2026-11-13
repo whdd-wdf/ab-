@@ -8,6 +8,11 @@ AI 只做判断、不自己算；定稿后须复述三元组（代码/名称/现
 运行（盒内）：nohup python3 /workspace/run_virtual_control.py > /workspace/vc_runner.log 2>&1 &
 干跑（沙箱验证，不调 Ollama）：python3 run_virtual_control.py --dry-run
   （VC_BASE/VC_WORKDIR 环境变量可改虚拟目录与产物目录，默认盒内路径）
+干跑模式：--dry-run（全链路）、--dry-run-bad-triple（三元组错即停）、
+  --dry-run-loose-format（松散定稿：复述在前、定稿行夹杂名称/现价、无理由）。
+定稿解析已放宽：分别抓代码/买入价/数量，允许行内夹杂文字与顺序颠倒；
+价量抓不到时程序从 check 表推导（买入价=现价、股数=qty_50k），日志注明；
+挑股理由缺失只记警告、不阻塞；三元组比对仍保留、不一致即停。
 产物：virtual_control_log.md（全程记录）、vc_step_*.txt（AI 原文）、
       vc_summary.json（解析出的关键值与时间戳，供沙箱核实）。
 """
@@ -25,6 +30,7 @@ CST = timezone(timedelta(hours=8))
 # 干跑模式开关（main 里由命令行参数设置）
 DRY_RUN = False
 DRY_RUN_BAD_TRIPLE = False
+DRY_RUN_LOOSE_FORMAT = False
 DRY_PICK = None  # 干跑定稿候选：{"code","name","price","qty"}，取自 check 表
 
 # 正例/反例（97 字）：涨幅闸门只看“涨幅≤5%”，负涨幅也通过，跌得多≠该买。
@@ -38,9 +44,35 @@ def now_cst():
 def ts():
     return now_cst().strftime("%Y-%m-%d %H:%M:%S")
 
-def r2(x):
-    # 与 virtual_ops.py 的 r2 同口径：round(x + 1e-9, 2)，辩论前复核比对涨幅时用。
-    return round(float(x) + 1e-9, 2)
+def r4(x):
+    # 与 virtual_ops.py 的 r4 同口径：round(x + 1e-9, 4)，辩论前复核比对涨幅时用。
+    return round(float(x) + 1e-9, 4)
+
+def parse_pick_loose(out_a, checks):
+    """放宽定稿解析：分别抓代码/买入价/数量三个字段，允许行内夹杂名称/现价等额外文字、
+    允许复述与定稿顺序颠倒。返回 (code, price, qty, src)。
+    优先在“定稿”行里抓；无定稿行则用“复述”行找代码（复述与定稿应为同一只），
+    价量缺失时由调用方从 check 表推导。"""
+    lines = [ln for ln in out_a.splitlines() if "定稿" in ln]
+    if lines:
+        zone = "\n".join(lines)
+        zone_name = "定稿行"
+    else:
+        lines2 = [ln for ln in out_a.splitlines() if "复述" in ln]
+        zone = "\n".join(lines2) if lines2 else out_a
+        zone_name = "复述行" if lines2 else "全段"
+    m_code = re.search(r"(\d{6})", zone)
+    m_price = re.search(r"买入价\s*[:：]?\s*([\d.]+)", zone)
+    m_qty = re.search(r"数量\s*[:：]?\s*(\d+)\s*股", zone)
+    code = m_code.group(1) if m_code else None
+    price = float(m_price.group(1)) if m_price else None
+    qty = int(m_qty.group(1)) if m_qty else None
+    src = "%s：代码%s/买入价%s/数量%s" % (
+        zone_name,
+        "已抓" if code else "缺失",
+        "已抓" if price is not None else "缺失",
+        "已抓" if qty is not None else "缺失")
+    return code, price, qty, src
 
 def log(msg):
     line = "[%s CST] %s" % (ts(), msg)
@@ -72,6 +104,12 @@ def dry_fake(label):
     if label == "步骤A选股":
         p = DRY_PICK or {"code": "600919", "name": "江苏银行", "price": 12.98, "qty": 3800}
         restated_price = p["price"] + 1.00 if DRY_RUN_BAD_TRIPLE else p["price"]
+        if DRY_RUN_LOOSE_FORMAT:
+            # 模拟上轮 AI 的松散定稿：复述在前、定稿行夹杂名称与现价、无挑股理由
+            return ("复述：代码%s，名称%s，现价%.2f\n"
+                    "定稿：代码%s，名称%s，现价%.2f，买入价%.2f，数量%d股"
+                    % (p["code"], p["name"], restated_price,
+                       p["code"], p["name"], p["price"], p["price"], p["qty"]))
         return ("按程序算好的表判断：%s %s 现价 %.2f，涨幅在 5%% 以内，P4 与金额闸门均通过，挑这只。\n"
                 "定稿：代码%s，买入价%.2f，数量%d股\n"
                 "复述：代码%s，名称%s，现价%.2f"
@@ -153,15 +191,18 @@ def run_check(code, buy_price=None):
     return chk
 
 def main(argv=None):
-    global DRY_RUN, DRY_RUN_BAD_TRIPLE, DRY_PICK
+    global DRY_RUN, DRY_RUN_BAD_TRIPLE, DRY_RUN_LOOSE_FORMAT, DRY_PICK
     ap = argparse.ArgumentParser(description="盒内 AI 对接虚拟程序：一轮管控（选股→把关→辩论→提交→成交确认）")
     ap.add_argument("--dry-run", action="store_true",
                     help="干跑：不调 Ollama，按步骤返回固定假回复，走通完整链路")
     ap.add_argument("--dry-run-bad-triple", action="store_true",
                     help="干跑：步骤 A 的复述现价故意写错，验证三元组不符即停、不进把关")
+    ap.add_argument("--dry-run-loose-format", action="store_true",
+                    help="干跑：步骤 A 定稿行夹杂名称/现价且复述在前、无挑股理由，验证放宽解析能抓到三字段并走通")
     args = ap.parse_args(argv)
-    DRY_RUN = bool(args.dry_run or args.dry_run_bad_triple)
+    DRY_RUN = bool(args.dry_run or args.dry_run_bad_triple or args.dry_run_loose_format)
     DRY_RUN_BAD_TRIPLE = bool(args.dry_run_bad_triple)
+    DRY_RUN_LOOSE_FORMAT = bool(args.dry_run_loose_format)
 
     os.makedirs(WORKDIR, exist_ok=True)
     with open(LOG, "w", encoding="utf-8") as f:
@@ -242,12 +283,36 @@ def main(argv=None):
         log("步骤A失败，停止"); json.dump(summary, open(SUMMARY, "w"), ensure_ascii=False, indent=2); return
     save_step("A_pick", prompt_a, out_a)
 
-    m = re.search(r"定稿：代码(\d{6})，买入价([\d.]+)，数量(\d+)股", out_a)
-    if not m:
-        log("步骤A未按格式给定稿行（正则未命中），停止，不替 AI 猜数字")
-        summary["steps"]["A_pick"]["parse"] = "定稿行未命中"
+    # ---- 放宽定稿解析：分别抓代码/买入价/数量，允许行内夹杂文字与顺序颠倒 ----
+    code, price, qty, parse_src = parse_pick_loose(out_a, checks)
+    summary["steps"]["A_pick"]["parse"] = parse_src
+    if code is None:
+        log("步骤A未抓到定稿代码（%s），停止，不替 AI 猜股票" % parse_src)
         json.dump(summary, open(SUMMARY, "w"), ensure_ascii=False, indent=2); return
-    code, price, qty = m.group(1), float(m.group(2)), int(m.group(3))
+    if price is None or qty is None:
+        # 程序推导价量兜底：买入价=现价、股数=check 表 qty_50k（AI 只定了代码）
+        chk0 = checks.get(code)
+        if chk0 is None:
+            log("步骤A定稿代码 %s 不在 check 表里，停止" % code)
+            json.dump(summary, open(SUMMARY, "w"), ensure_ascii=False, indent=2); return
+        if price is None:
+            price = chk0["price"]
+        if qty is None:
+            qty = chk0["qty_50k"]
+        log("价量由程序推导、AI 只定了代码：代码=%s 买入价=%.2f（=现价） 数量=%d（=check 表股数）"
+            % (code, price, qty))
+        summary["steps"]["A_pick"]["price_qty_derived"] = True
+    else:
+        summary["steps"]["A_pick"]["price_qty_derived"] = False
+    # ---- 挑股理由缺失不阻塞：理由为空记警告，不停止 ----
+    body_lines = [ln for ln in out_a.splitlines()
+                  if "定稿" not in ln and "复述" not in ln]
+    rationale = "".join(body_lines).strip()
+    if len(rationale) < 20:
+        log("警告：挑股理由缺失（正文仅 %d 字），记警告、不阻塞" % len(rationale))
+        summary["steps"]["A_pick"]["rationale_warning"] = "理由缺失（正文 %d 字）" % len(rationale)
+    else:
+        summary["steps"]["A_pick"]["rationale_warning"] = None
     # ---- 三元组复述比对（建议 2）：复述行须与 quotes 的名称/现价一致，否则即停 ----
     mt = re.search(r"复述：代码(\d{6})，名称(.+?)，现价([\d.]+)", out_a)
     triple = {"ok": False}
@@ -319,7 +384,7 @@ def main(argv=None):
     qd = quotes.get(code)
     if qd is None or triple["name"] != qd["name"] or abs(price - qd["price"]) > 0.01:
         failures.append("三元组不符：定稿买入价/名称与 quotes 不一致")
-    rise_pick = r2((price - prev_close) / prev_close)
+    rise_pick = r4((price - prev_close) / prev_close)
     if abs(rise_pick - chk_d["change_pct"]) > 0.0001:
         failures.append("涨幅不符：定稿涨幅 %.4f 与 check change_pct %.4f 不一致"
                         % (rise_pick, chk_d["change_pct"]))

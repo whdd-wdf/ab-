@@ -193,6 +193,11 @@ def r2(x):
     return round(float(x) + 1e-9, 2)
 
 
+def r4(x):
+    """涨幅/偏差用 4 位小数（显示到 0.01%），gates 仍用原始比值判定。"""
+    return round(float(x) + 1e-9, 4)
+
+
 def load_json(path, default):
     if not os.path.exists(path):
         return default
@@ -243,7 +248,7 @@ def _gen_quotes():
             price = min(max(price, prev * 0.97), prev * 1.03)
         price = round_tick(price, tick_of(code))
         out[code] = {"name": q["name"], "prev_close": prev, "price": price,
-                     "change_pct": r2(price / prev - 1)}
+                     "change_pct": r4(price / prev - 1)}
     return out
 
 
@@ -334,8 +339,8 @@ def cmd_check(args):
             fail("买价须 > 0")
     else:
         buy_price = price
-    change = r2(buy_price / prev_close - 1)
-    deviation = r2(buy_price / price - 1)
+    change = r4(buy_price / prev_close - 1)
+    deviation = r4(buy_price / price - 1)
     p4_limit = round(prev_close * 1.03, 2)
     qty_50k = int(50000 // (buy_price * 100)) * 100
     amount_50k = r2(buy_price * qty_50k)
