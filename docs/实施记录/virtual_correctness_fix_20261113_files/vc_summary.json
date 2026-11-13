@@ -1,0 +1,1 @@
+{"b_available":490341.72,"dry_run":false,"dry_run_bad_triple":false,"gate_open":true,"started_cst":"2026-11-13 12:34:38","steps":{"A_pick":{"attempts":1,"ok":true,"parse":"定稿行未命中","seconds":4.274588584899902},"precheck":{"codes":["000001","000596","002475","600000","600018","600176","600919","603198"],"ok":true}}}
